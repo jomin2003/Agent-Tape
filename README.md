@@ -483,6 +483,20 @@ Full reference: [`docs/api.md`](docs/api.md).
 
 ---
 
+## Documentation
+
+| Document | What it is for |
+|---|---|
+| [`docs/index.md`](docs/index.md) | The thirty-second version, and a map of the rest |
+| [`docs/design.md`](docs/design.md) | Why the library is shaped this way — every design decision and the constraint that produced it |
+| [`docs/determinism.md`](docs/determinism.md) | What this can and cannot make reproducible, including how to find the boundaries you have not wrapped |
+| [`docs/tape-format.md`](docs/tape-format.md) | The on-disk format, specified for someone writing their own reader or writer |
+| [`docs/api.md`](docs/api.md) | Reference for every public name |
+| [`docs/faq.md`](docs/faq.md) | Straight answers, including "no" where the answer is no |
+| [`research/`](research/deterministic-replay-and-rollback-for-ai-agents.md) | The literature review this library is built on, and the ten problems it does not solve |
+
+---
+
 ## Testing
 
 ```bash

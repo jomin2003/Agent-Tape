@@ -12,6 +12,49 @@ wrote them, so format breaks are treated as a last resort.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-17
+
+First public release.
+
+The two defects under **Fixed** below were found by the CI matrix during the
+first push, before this version had been published anywhere. They are part of
+0.1.0 rather than a follow-up patch, which is why there is no 0.1.1.
+
+### Added
+
+- `Session.record` / `Session.replay` and the `agenttape.record` /
+  `agenttape.replay` helpers, with a `with`-statement API.
+- `Tape`: append-only, hash-chained, `fsync`-before-return event log, with a
+  separately readable `manifest.json` and a content-addressed blob store for
+  oversized payloads.
+- Recorded boundaries: model calls, tool calls, wall and monotonic clock, random
+  number generation, environment reads, file reads, UUIDs, tokens, state
+  snapshots, outcomes, marks and logs.
+- Sequence-primary, fingerprint-validated replay matching. Divergence raises
+  `RequestMismatchError` with a unified diff of the recorded and replayed
+  requests. `TapeExhaustedError` and `UnconsumedEventsError` cover runs that are
+  longer or shorter than the recording.
+- `Session.effect` / `Session.compensator` / `Session.rollback`: compensation
+  plans recorded in the tape, so rollback is itself replayable and never
+  re-executes a compensator during replay.
+- `Tape.fork` plus `Session.replay(..., on_exhausted="live", fork_to=...)` for
+  counterfactual replay: branch a recording, replay the prefix, continue live
+  into a new tape, leaving the original untouched.
+- `verify`, `diff`, and `check_determinism` for integrity checking, regression
+  diffing, and tape self-testing.
+- Canonical serialisation and fingerprinting that are stable across processes
+  and `PYTHONHASHSEED` values.
+- Zero runtime dependencies; pure standard library.
+- Tests covering the full inherited `random.Random` surface (`gauss`,
+  `triangular`, `betavariate`, `expovariate`, `gammavariate`, `lognormvariate`,
+  `normalvariate`, `paretovariate`, `weibullvariate`, `randbytes`) against
+  record and replay. The design claim is that overriding `random()` and
+  `getrandbits()` captures every method, including ones added to the standard
+  library after this code was written.
+- `test_integrity_and_payload_availability_fail_independently`, which pins the
+  reason the event hash covers the body *as stored* rather than the logical one:
+  tamper detection must not depend on payloads being resolvable.
+
 ### Fixed
 
 - **`DeterministicRandom` raised `TypeError` on Python 3.9 and 3.10.** Any agent
@@ -47,18 +90,6 @@ wrote them, so format breaks are treated as a last resort.
   falls back to asking where each module resolves on disk, and a meta-test
   asserts that the guard can actually detect a dependency.
 
-### Added
-
-- Tests covering the full inherited `random.Random` surface (`gauss`,
-  `triangular`, `betavariate`, `expovariate`, `gammavariate`, `lognormvariate`,
-  `normalvariate`, `paretovariate`, `weibullvariate`, `randbytes`) against
-  record and replay — the design claim is that overriding `random()` and
-  `getrandbits()` captures every method, including ones added to the standard
-  library after this code was written.
-- `test_integrity_and_payload_availability_fail_independently`, which pins the
-  reason the event hash covers the body *as stored* rather than the logical one:
-  tamper detection must not depend on payloads being resolvable.
-
 ### Changed
 
 - The `package` CI job now installs the built wheel into a clean environment and
@@ -76,36 +107,6 @@ wrote them, so format breaks are treated as a last resort.
   3.9 job in the CI matrix.
 - Resolved all `mypy` findings, including a shadowed parameter name in
   `check_determinism` and untyped `Tape._fh`.
-
-## [0.1.0] - 2026-09-17
-
-Initial release.
-
-### Added
-
-- `Session.record` / `Session.replay` and the `agenttape.record` /
-  `agenttape.replay` helpers, with a `with`-statement API.
-- `Tape`: append-only, hash-chained, `fsync`-before-return event log, with a
-  separately readable `manifest.json` and a content-addressed blob store for
-  oversized payloads.
-- Recorded boundaries: model calls, tool calls, wall and monotonic clock, random
-  number generation, environment reads, file reads, UUIDs, tokens, state
-  snapshots, outcomes, marks and logs.
-- Sequence-primary, fingerprint-validated replay matching. Divergence raises
-  `RequestMismatchError` with a unified diff of the recorded and replayed
-  requests. `TapeExhaustedError` and `UnconsumedEventsError` cover runs that are
-  longer or shorter than the recording.
-- `Session.effect` / `Session.compensator` / `Session.rollback`: compensation
-  plans recorded in the tape, so rollback is itself replayable and never
-  re-executes a compensator during replay.
-- `Tape.fork` plus `Session.replay(..., on_exhausted="live", fork_to=...)` for
-  counterfactual replay: branch a recording, replay the prefix, continue live
-  into a new tape, leaving the original untouched.
-- `verify`, `diff`, and `check_determinism` for integrity checking, regression
-  diffing, and tape self-testing.
-- Canonical serialisation and fingerprinting that are stable across processes
-  and `PYTHONHASHSEED` values.
-- Zero runtime dependencies; pure standard library.
 
 [Unreleased]: https://github.com/jomin2003/Agent-Tape/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/jomin2003/Agent-Tape/releases/tag/v0.1.0
