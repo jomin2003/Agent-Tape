@@ -140,21 +140,26 @@ Stated up front, because it matters:
 
 ## Installation
 
+**Not on PyPI yet.** Install straight from the repository:
+
 ```bash
-pip install agenttape
+pip install "agenttape @ git+https://github.com/jomin2003/Agent-Tape@v0.1.0"
+```
+
+Or from a checkout, for development:
+
+```bash
+git clone https://github.com/jomin2003/Agent-Tape.git
+cd Agent-Tape
+pip install -e ".[dev]"
+pytest
 ```
 
 Requires Python 3.9+. No runtime dependencies — the standard library only, and
 there is a test that enforces it.
 
-From source:
-
-```bash
-git clone https://github.com/jomin2003/Agent-Tape.git
-cd agenttape
-pip install -e ".[dev]"
-pytest
-```
+Once the package is on PyPI this section becomes `pip install agenttape`; see
+[RELEASING.md](RELEASING.md) for the checklist that gets it there.
 
 ---
 
