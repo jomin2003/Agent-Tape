@@ -22,7 +22,7 @@ surface area, including methods that do not exist yet.
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from .events import EventKind
 
@@ -47,17 +47,51 @@ class DeterministicRandom(random.Random):
     #: The session this generator draws its entropy from.
     _agenttape_session: "Session"
 
+    def __new__(cls, *args: Any, **kwargs: Any) -> "DeterministicRandom":
+        """Construct without forwarding arguments to ``random.Random.__new__``.
+
+        ``random.Random`` is a C type, and before Python 3.11 its ``__new__``
+        inspects the positional argument tuple itself::
+
+            if (PyTuple_GET_SIZE(args) > 1) {
+                PyErr_SetString(PyExc_TypeError, "Random() requires 0 or 1 argument");
+                return NULL;
+            }
+            if (PyTuple_GET_SIZE(args) == 1)
+                arg = PyTuple_GET_ITEM(args, 0);
+            tmp = random_seed(self, arg);
+
+        (Modules/_randommodule.c, CPython 3.10.)
+
+        So ``DeterministicRandom(session, seed)`` failed inside ``tp_new`` -- with
+        two arguments the call is rejected outright, and with one it would try to
+        *seed with the session object*. ``__init__`` was never reached, which is
+        why the traceback pointed at the constructor call site rather than at
+        anything inside it.
+
+        The argument check was removed in 3.11, so a modern interpreter accepts
+        the call and the bug is invisible. Dropping the arguments here makes
+        construction valid on every version: zero positional arguments is the one
+        case ``random_new`` has always accepted.
+
+        Note the deliberate side effect: with no argument, ``random_new`` seeds
+        from the operating system. That costs one urandom read per generator and
+        is immediately overwritten by :meth:`__init__`, so it cannot affect
+        determinism.
+        """
+        return super().__new__(cls)
+
     def __init__(self, session: "Session", seed: Optional[int] = None) -> None:
         # The channel must be in place before seeding, because seeding must not
         # touch a missing attribute.
         self._agenttape_session = session
-        # Call seed() rather than super().__init__().
-        #
-        # Before Python 3.11, random.Random does not define __init__ -- it is a
-        # C type that seeds in __new__ -- so super().__init__(seed) resolves to
-        # object.__init__ and raises "Random() requires 0 or 1 argument". seed()
-        # exists on every supported version and is the documented entry point.
-        # Found by CI on the 3.9 and 3.10 jobs; a local 3.13 venv never sees it.
+        # gauss() reads this attribute directly and random.Random.__init__ is
+        # what normally initialises it. We deliberately do not call that (it
+        # takes a seed as its only argument), so set it here. Without this,
+        # session.rng.gauss() raises AttributeError on Python 3.11+.
+        self.gauss_next: Optional[float] = None
+        # seed() is the documented entry point and exists on every supported
+        # version, unlike random.Random.__init__ which only appears in 3.11+.
         self.seed(seed)
 
     # -- the two primitives everything else is built on --------------------- #

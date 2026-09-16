@@ -14,19 +14,50 @@ wrote them, so format breaks are treated as a last resort.
 
 ### Fixed
 
-- **`DeterministicRandom` raised `TypeError` on Python 3.9 and 3.10.** The
-  constructor called `super().__init__(seed)`, but before Python 3.11
-  `random.Random` does not define `__init__` — it is a C type that seeds in
-  `__new__` — so the call resolved to `object.__init__` and raised
-  `Random() requires 0 or 1 argument`. Any agent that touched `session.rng` was
-  unusable on those versions. It now calls `self.seed(seed)`, which exists on
-  every supported version. Caught by the CI matrix; a local 3.13 environment
-  cannot see it.
+- **`DeterministicRandom` raised `TypeError` on Python 3.9 and 3.10.** Any agent
+  that touched `session.rng` was unusable on those versions.
+
+  `random.Random` is a C type, and before Python 3.11 its `__new__` inspects the
+  positional argument tuple itself:
+
+  ```c
+  if (PyTuple_GET_SIZE(args) > 1) {
+      PyErr_SetString(PyExc_TypeError, "Random() requires 0 or 1 argument");
+      return NULL;
+  }
+  ```
+
+  `DeterministicRandom(session, seed)` therefore failed inside `tp_new`, before
+  `__init__` ever ran — with two arguments the call is rejected outright, and
+  with one it would have tried to *seed with the session object*. The class now
+  defines `__new__` and drops the arguments, so zero positional arguments reach
+  the C constructor, which is the one case it has always accepted.
+
+  Two further consequences of not calling `random.Random.__init__` were fixed at
+  the same time: `gauss_next` is now initialised explicitly (`gauss()` reads it
+  directly and raised `AttributeError` on Python 3.11+), and the constructor is
+  covered by a test that passes both arguments.
+
+  The argument check was removed in 3.11, so a modern interpreter cannot
+  reproduce the failure. Caught by the CI matrix; verified against
+  `Modules/_randommodule.c` on the 3.10 branch.
 - The third-party-dependency guard in the test suite was vacuous on Python 3.9,
   where `sys.stdlib_module_names` does not exist: it reported every standard
   library import as third-party and failed for the wrong reason. The check now
   falls back to asking where each module resolves on disk, and a meta-test
   asserts that the guard can actually detect a dependency.
+
+### Added
+
+- Tests covering the full inherited `random.Random` surface (`gauss`,
+  `triangular`, `betavariate`, `expovariate`, `gammavariate`, `lognormvariate`,
+  `normalvariate`, `paretovariate`, `weibullvariate`, `randbytes`) against
+  record and replay — the design claim is that overriding `random()` and
+  `getrandbits()` captures every method, including ones added to the standard
+  library after this code was written.
+- `test_integrity_and_payload_availability_fail_independently`, which pins the
+  reason the event hash covers the body *as stored* rather than the logical one:
+  tamper detection must not depend on payloads being resolvable.
 
 ### Changed
 
@@ -45,12 +76,6 @@ wrote them, so format breaks are treated as a last resort.
   3.9 job in the CI matrix.
 - Resolved all `mypy` findings, including a shadowed parameter name in
   `check_determinism` and untyped `Tape._fh`.
-
-### Added
-
-- `test_integrity_and_payload_availability_fail_independently`, which pins the
-  reason the event hash covers the body *as stored* rather than the logical one:
-  tamper detection must not depend on payloads being resolvable.
 
 ## [0.1.0] - 2026-09-17
 
