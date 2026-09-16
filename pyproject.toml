@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
-authors = [{ name = "agenttape contributors" }]
+authors = [{ name = "jomin2003" }]
 keywords = [
     "ai-agents",
     "llm",
@@ -57,11 +57,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/agenttape"
-Documentation = "https://github.com/your-org/agenttape/tree/main/docs"
-Repository = "https://github.com/your-org/agenttape"
-Issues = "https://github.com/your-org/agenttape/issues"
-Changelog = "https://github.com/your-org/agenttape/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/jomin2003/Agent-Tape"
+Documentation = "https://github.com/jomin2003/Agent-Tape/tree/main/docs"
+Repository = "https://github.com/jomin2003/Agent-Tape"
+Issues = "https://github.com/jomin2003/Agent-Tape/issues"
+Changelog = "https://github.com/jomin2003/Agent-Tape/blob/main/CHANGELOG.md"
 
 # No [project.scripts]: agenttape is a library, not a CLI or an application.
 # It is meant to be imported by the agent runtime, not invoked from a shell.

@@ -6,7 +6,7 @@ narrow; the notes below are mostly about keeping it that way.
 ## Getting set up
 
 ```bash
-git clone https://github.com/your-org/agenttape.git
+git clone https://github.com/jomin2003/Agent-Tape.git
 cd agenttape
 python -m venv .venv
 . .venv/bin/activate          # Windows: .venv\Scripts\activate

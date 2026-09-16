@@ -2,7 +2,7 @@ agenttape
 Copyright 2026 agenttape contributors
 
 This product includes software developed as part of the agenttape project
-(https://github.com/your-org/agenttape).
+(https://github.com/jomin2003/Agent-Tape).
 
 The design of this library draws on published research and on prior art in
 record/replay systems. See research/deterministic-replay-and-rollback-for-ai-agents.md

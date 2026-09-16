@@ -42,5 +42,5 @@ Initial release.
   and `PYTHONHASHSEED` values.
 - Zero runtime dependencies; pure standard library.
 
-[Unreleased]: https://github.com/your-org/agenttape/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-org/agenttape/releases/tag/v0.1.0
+[Unreleased]: https://github.com/jomin2003/Agent-Tape/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jomin2003/Agent-Tape/releases/tag/v0.1.0

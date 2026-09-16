@@ -23,6 +23,6 @@ keywords:
   - rollback
   - observability
 authors:
-  - name: "agenttape contributors"
-repository-code: "https://github.com/your-org/agenttape"
-url: "https://github.com/your-org/agenttape"
+  - name: "jomin2003"
+repository-code: "https://github.com/jomin2003/Agent-Tape"
+url: "https://github.com/jomin2003/Agent-Tape"

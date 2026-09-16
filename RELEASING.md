@@ -2,34 +2,40 @@
 
 A checklist. Everything here is mechanical; the point is not to skip a step.
 
-## Before you publish the repository
+## Repository facts
 
-The scaffolding uses placeholder values in a few places. Replace them **before**
-the first public push:
+| | |
+|---|---|
+| Repository | <https://github.com/jomin2003/Agent-Tape> |
+| Visibility | Public |
+| Default branch | `main` |
+| Package name | `agenttape` (the repository name and the import name differ deliberately; `Agent-Tape` is the project, `agenttape` is the module) |
+| License | Apache-2.0 |
 
-| File | Placeholder | Replace with |
-|---|---|---|
-| `pyproject.toml` | `https://github.com/your-org/agenttape` (×4 in `[project.urls]`) | The real repository URL |
-| `pyproject.toml` | `authors = [{ name = "agenttape contributors" }]` | A real name and, optionally, an email |
-| `NOTICE` | `https://github.com/your-org/agenttape` | The real repository URL |
-| `CITATION.cff` | `repository-code`, `url` | The real repository URL |
-| `CHANGELOG.md` | `your-org` in the link definitions | The real organisation |
-| `CONTRIBUTING.md` | `git clone https://github.com/your-org/agenttape.git` | The real clone URL |
+The repository URLs in `pyproject.toml`, `NOTICE`, `CITATION.cff`, `CHANGELOG.md`,
+`CONTRIBUTING.md` and `.github/ISSUE_TEMPLATE/config.yml` all point at the real
+repository. If the repository is ever renamed or transferred, update those, then
+re-check that `python -m build` still succeeds.
 
-Then:
+### Open items before a PyPI release
 
-- [ ] `LICENSE` is present and correct (Apache-2.0), and `NOTICE` names the
-      copyright holder.
-- [ ] `agenttape.__version__` and the git tag agree.
-- [ ] `git log` contains no secrets, no tapes, and no personal data. Tapes are
-      gitignored, but check anyway — they contain full prompts.
-- [ ] `python -m build && python -m twine check dist/*` passes.
-- [ ] The CI workflow is green on every supported Python and OS.
-- [ ] The examples all run offline: `make examples`.
-- [ ] The README renders correctly on GitHub, including the tables and the
-      `research/` link.
-- [ ] The repository description and topics are set on GitHub.
-- [ ] `SECURITY.md` is present so GitHub surfaces the private reporting flow.
+- [ ] `pyproject.toml` `authors` currently lists `agenttape contributors` with no
+      email. Add a real name and, if you want one published, an email.
+- [ ] `NOTICE` names `agenttape contributors` as the copyright holder. Change it
+      to a real name or entity if you want the copyright attributed to one.
+- [ ] Decide whether to claim the `agenttape` name on PyPI. It is unclaimed as of
+      writing; the first `twine upload` takes it.
+
+### Verified at first publication
+
+- [x] `LICENSE` present and correct (Apache-2.0, verbatim from apache.org), and
+      `NOTICE` present.
+- [x] `python -m build && python -m twine check dist/*` passes on both sdist and
+      wheel; the wheel contains only the package, `py.typed`, and the licenses.
+- [x] 271 tests pass; all five examples run offline.
+- [x] `git log` contains no secrets, no tapes, and no files over 100 KB.
+- [x] The CI workflow covers Python 3.9–3.13 on Linux, macOS and Windows.
+- [x] `SECURITY.md` is present so GitHub surfaces the private reporting flow.
 
 ## Release checklist
 

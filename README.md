@@ -143,7 +143,7 @@ there is a test that enforces it.
 From source:
 
 ```bash
-git clone https://github.com/your-org/agenttape.git
+git clone https://github.com/jomin2003/Agent-Tape.git
 cd agenttape
 pip install -e ".[dev]"
 pytest
