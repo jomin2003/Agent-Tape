@@ -1,0 +1,39 @@
+# Normalise line endings. The repository is authored on Windows and consumed
+# everywhere; without this, every file shows as modified on the first checkout
+# on a different platform.
+* text=auto eol=lf
+
+# Binary-ish artefacts that must never be line-ending-mangled.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# Recorded tapes are machine-written and content-addressed. A single byte of
+# line-ending translation would break every hash in the chain.
+*.tape -text
+*.jsonl -text
+
+# Lockfiles and generated metadata should not be merged by hand.
+*.lock -text
+
+# Keep these files exactly as authored.
+LICENSE text eol=lf
+NOTICE text eol=lf
+
+# GitHub renders these from the working tree, so be explicit.
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.py text eol=lf
+
+# Makefiles require tabs; do not let anything rewrite them.
+Makefile text eol=lf whitespace=tab-in-indent,tabwidth=4
+
+# Diffs
+*.py diff=python
+*.md diff=markdown
