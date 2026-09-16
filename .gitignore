@@ -52,3 +52,7 @@ coverage.xml
 *.tape/
 runs/
 .agenttape/
+
+# Local agent-assistant state. Project notes for whoever is working on this
+# repository, not part of the published package.
+.workbuddy-ai/
