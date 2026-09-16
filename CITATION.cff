@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "agenttape: deterministic record and replay for AI agents"
+abstract: >-
+  agenttape records AI agent runs to local, append-only, hash-chained tapes and
+  replays them offline. Replaying a tape re-runs the agent's own logic while
+  every external answer -- model responses, tool results, clock reads, random
+  draws -- is served from the recording, with no live calls and no side effects.
+  Divergence from the recording halts with a diff instead of being silently
+  tolerated. The library is pure Python with no runtime dependencies and is
+  intended to be embedded in an agent runtime rather than invoked as a tool.
+type: software
+license: Apache-2.0
+version: 0.1.0
+date-released: "2026-09-17"
+keywords:
+  - ai agents
+  - llm
+  - deterministic replay
+  - record and replay
+  - reproducibility
+  - debugging
+  - rollback
+  - observability
+authors:
+  - name: "agenttape contributors"
+repository-code: "https://github.com/your-org/agenttape"
+url: "https://github.com/your-org/agenttape"
