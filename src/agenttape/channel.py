@@ -27,6 +27,7 @@ false confidence.
 
 from __future__ import annotations
 
+import contextlib
 import difflib
 import json
 import time
@@ -110,8 +111,9 @@ class Recorder:
         """
         if fn is None and response is UNSET:
             raise SessionStateError(
-                "recording {!r} ({}) needs either an fn to execute or an explicit "
-                "response=".format(name, kind)
+                "recording {!r} ({}) needs either an fn to execute or an explicit response=".format(
+                    name, kind
+                )
             )
 
         started_at = time.time()
@@ -346,8 +348,9 @@ class Replayer:
             if diff:
                 detail_lines.append(diff)
         error = RequestMismatchError(
-            "replay diverged at seq {}: the agent's call does not match the "
-            "recording".format(expected.seq),
+            "replay diverged at seq {}: the agent's call does not match the recording".format(
+                expected.seq
+            ),
             seq=expected.seq,
             expected=expected.identity(),
             observed={"kind": kind, "name": name, "key": key},
@@ -429,10 +432,8 @@ class Replayer:
         """
         stream = self._stream
         if hasattr(stream, "close"):
-            try:
-                stream.close()  # type: ignore[union-attr]
-            except Exception:  # pragma: no cover - defensive
-                pass
+            with contextlib.suppress(Exception):  # pragma: no cover - defensive
+                stream.close()
 
     def summary(self) -> Dict[str, Any]:
         """Counters describing what this replayer did."""
@@ -475,7 +476,7 @@ def request_diff(recorded: Any, observed: Any, *, context: int = 1) -> str:
         )
     )
     if len(lines) > 40:
-        lines = lines[:40] + ["  ... (diff truncated)"]
+        lines = [*lines[:40], "  ... (diff truncated)"]
     return "\n".join("  " + line for line in lines)
 
 

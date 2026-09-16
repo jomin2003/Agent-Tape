@@ -125,6 +125,39 @@ def test_blob_checks_can_be_skipped(tmp_path):
     assert at.verify(path, check_blobs=False).ok
 
 
+def test_integrity_and_payload_availability_fail_independently(tmp_path):
+    """A tape with a damaged blob store still verifies, and still cannot be read.
+
+    This separation is the whole reason the event hash covers the body *as
+    stored* rather than the logical one. If the hash covered logical content,
+    verifying a tape would require resolving its blobs, and "someone edited this
+    tape" would be indistinguishable from "a blob file is missing" -- two very
+    different problems with two very different responses.
+    """
+    path = str(tmp_path / "blobby.tape")
+    with at.record(path, blob_threshold=128) as session:
+        session.tool("fetch", ["big"], fn=lambda: "x" * 4000)
+
+    for blob in (tmp_path / "blobby.tape" / BLOBS_DIR).iterdir():
+        blob.unlink()
+
+    # Tamper detection still works, because it never touches the blob store.
+    report = at.verify(path, check_blobs=False)
+    assert report.chain_ok
+    assert report.digest_matches
+    assert report.ok
+
+    # And the payload genuinely is gone.
+    with pytest.raises(at.TapeIntegrityError):
+        list(at.Tape.open(path).iter_events())
+
+    # With blob checking on, the missing payload is reported as its own problem.
+    report = at.verify(path)
+    assert not report.ok
+    assert report.chain_ok  # the log itself is untouched
+    assert report.missing_blobs
+
+
 def test_report_serialises_and_renders(tape):
     report = at.verify(tape)
     assert json.dumps(report.to_dict())

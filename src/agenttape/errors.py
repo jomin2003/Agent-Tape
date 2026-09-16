@@ -185,7 +185,8 @@ class RecordedError(AgentTapeError):
     def __init__(self, record: dict) -> None:
         message = record.get("message") or record.get("repr") or "recorded error"
         super().__init__(
-            "{}: {} (reconstructed as RecordedError; original type {!r} was not "
-            "importable)".format(record.get("type", "Error"), message, record.get("type"))
+            "{}: {} (reconstructed as RecordedError; original type {!r} was not importable)".format(
+                record.get("type", "Error"), message, record.get("type")
+            )
         )
         self.record = record

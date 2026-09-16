@@ -115,21 +115,42 @@ exclude_lines = [
 line-length = 100
 target-version = "py39"
 src = ["src", "tests", "examples"]
+extend-exclude = [".workbuddy-ai"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RET", "ARG", "PTH", "RUF"]
+# A deliberately narrow set: correctness and import hygiene, not style churn.
+#
+# Notably absent is `UP` (pyupgrade). The codebase uses str.format() uniformly
+# rather than f-strings; both are idiomatic, and rewriting ~200 call sites would
+# be a large mechanical diff for no functional gain. Similarly `N` (naming) and
+# `PTH`/`ARG`/`RET`/`TCH` were dropped: their findings here were stylistic
+# preferences rather than defects, and a lint config that argues with the
+# codebase is a lint config people learn to ignore.
+select = ["E", "F", "W", "I", "B", "C4", "SIM", "RUF"]
 ignore = [
-    "E501",   # line length is handled by the formatter
-    "B008",   # function calls in argument defaults are fine here
-    "RUF001", # allow non-ASCII punctuation in prose
+    "E501",    # line length is the formatter's job
+    "B008",    # function calls in argument defaults are fine here
+    "RUF001",  # non-ASCII punctuation in prose (x, em dashes, arrows)
+    "RUF002",
+    "RUF003",
+    "RUF022",  # __all__ is grouped by API area to mirror the documentation
+    "SIM108",  # a ternary is not always clearer than if/else
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ARG", "S101"]
-"examples/*" = ["T201", "ARG"]
+"tests/*" = [
+    "B011",    # assert False is fine in a test
+    # `with pytest.raises(...)` around `with session:` reads better nested than
+    # combined on one line, which is why the tests are written that way.
+    "SIM117",
+]
 
 [tool.mypy]
-python_version = "3.9"
+# Deliberately no `python_version` override. The package supports Python 3.9,
+# but mypy dropped the ability to target it, so pinning this to 3.10 would make
+# the config contradict `requires-python`. Compatibility with 3.9 is guarded by
+# the 3.9 pytest job in CI -- which is the check that actually caught a
+# 3.9-and-3.10-only runtime bug that type checking could never have seen.
 files = ["src/agenttape"]
 strict = false
 warn_unused_ignores = true

@@ -36,7 +36,7 @@ def payments(ledger):
 
 @pytest.fixture
 def workflow(payments):
-    charge, refund = payments
+    charge, _refund = payments
 
     def run(session):
         session.effect(
@@ -77,9 +77,7 @@ def test_effect_records_its_compensation_plan(tmp_path, payments):
     charge, _refund = payments
     path = str(tmp_path / "r.tape")
     with at.record(path) as session:
-        session.effect(
-            "charge_card", charge, args=("a", 1), compensate=("refund", {"reason": "x"})
-        )
+        session.effect("charge_card", charge, args=("a", 1), compensate=("refund", {"reason": "x"}))
     event = next(e for e in at.Tape.open(path).iter_events() if e.kind == "effect")
     assert event.request["compensate"] == {"name": "refund", "payload": {"reason": "x"}}
 
@@ -97,7 +95,9 @@ def test_invalid_compensation_spec_is_rejected(tmp_path, payments):
     charge, _refund = payments
     with at.record(str(tmp_path / "r.tape")) as session:
         with pytest.raises(CompensationError):
-            session.effect("charge_card", charge, args=("a", 1), compensate=("refund", "not-a-dict"))
+            session.effect(
+                "charge_card", charge, args=("a", 1), compensate=("refund", "not-a-dict")
+            )
 
 
 def test_effects_are_listed_with_their_status(tmp_path, payments):
@@ -206,7 +206,7 @@ def test_a_failing_compensator_does_not_stop_the_others(tmp_path, payments, ledg
 
 
 def test_effects_without_a_plan_are_skipped_by_rollback(tmp_path, payments, ledger):
-    charge, _refund = payments
+    _charge, _refund = payments
     path = str(tmp_path / "r.tape")
     with at.record(path) as session:
         session.effect("send_email", response="sent")  # irreversible, no plan
@@ -222,7 +222,7 @@ def test_effects_without_a_plan_are_skipped_by_rollback(tmp_path, payments, ledg
 def test_replay_reproduces_rollback_without_running_compensators(
     tmp_path, payments, ledger, workflow
 ):
-    charge, refund = payments
+    _charge, refund = payments
     path = str(tmp_path / "r.tape")
 
     with at.record(path) as session:
@@ -244,7 +244,7 @@ def test_replay_does_not_need_the_compensator_to_be_registered(
     tmp_path, payments, ledger, workflow
 ):
     """Replay never calls the compensator, so registration is optional there."""
-    charge, refund = payments
+    _charge, refund = payments
     path = str(tmp_path / "r.tape")
     with at.record(path) as session:
         session.compensator("refund", refund)
@@ -258,7 +258,7 @@ def test_replay_does_not_need_the_compensator_to_be_registered(
 
 
 def test_replay_does_not_re_run_the_effect(tmp_path, payments, ledger, workflow):
-    charge, refund = payments
+    _charge, refund = payments
     path = str(tmp_path / "r.tape")
     with at.record(path) as session:
         session.compensator("refund", refund)

@@ -79,7 +79,7 @@ boundary through the session, not to loosen the check.**
 
 ```python
 def leaky_agent(session):
-    jitter = random.random()                     # not recorded
+    jitter = random.random()  # not recorded
     answer = session.model("m", {...}, fn=...)
     session.outcome({"answer": answer})
 ```

@@ -312,6 +312,30 @@ class Session:
             self._rng = DeterministicRandom(self, self._seed)
         return self._rng
 
+    # -- the active channel --------------------------------------------- #
+    #
+    # Exactly one of the two channels exists at a time, and which one changes
+    # mid-session when a live tail begins. These accessors make the invariant
+    # explicit and turn "impossible" states into a diagnosable error rather
+    # than an AttributeError on None.
+
+    def _require_recorder(self) -> Recorder:
+        """The active recorder, or raise if this session is replaying."""
+        if self._recorder is None:
+            raise SessionStateError(
+                "this session has no recorder: it was opened with "
+                "Session.replay() and has not gone live"
+            )
+        return self._recorder
+
+    def _require_replayer(self) -> Replayer:
+        """The active replayer, or raise if this session is recording."""
+        if self._replayer is None:
+            raise SessionStateError(
+                "this session has no replayer: it was opened with Session.record()"
+            )
+        return self._replayer
+
     # ------------------------------------------------------------------ #
     # The core exchange
     # ------------------------------------------------------------------ #
@@ -360,22 +384,20 @@ class Session:
         key = fingerprint(kind, name, request)
 
         if self._mode == "record":
-            value = self._recorder.exchange(
-                kind, name, key, request, fn=fn, response=response, meta=meta
-            )
-            self._last_event = self._recorder.last_event
+            recorder = self._require_recorder()
+            value = recorder.exchange(kind, name, key, request, fn=fn, response=response, meta=meta)
+            self._last_event = recorder.last_event
             return value
 
         try:
-            event = self._replayer.next_event(kind, name, key, request)
+            event = self._require_replayer().next_event(kind, name, key, request)
         except TapeExhaustedError:
             if self._on_exhausted != "live":
                 raise
             self._go_live()
-            value = self._recorder.exchange(
-                kind, name, key, request, fn=fn, response=response, meta=meta
-            )
-            self._last_event = self._recorder.last_event
+            recorder = self._require_recorder()
+            value = recorder.exchange(kind, name, key, request, fn=fn, response=response, meta=meta)
+            self._last_event = recorder.last_event
             return value
 
         self._last_event = event
@@ -546,9 +568,7 @@ class Session:
 
     def log(self, message: str, **data: Any) -> None:
         """Write a free-form note into the tape."""
-        self.exchange(
-            EventKind.LOG, "log", {"message": message, "data": data}, response=message
-        )
+        self.exchange(EventKind.LOG, "log", {"message": message, "data": data}, response=message)
 
     def state(self, snapshot: Any, *, label: Optional[str] = None) -> str:
         """Record a state snapshot and return its fingerprint.
@@ -615,6 +635,7 @@ class Session:
                 return payments.refund(result["charge_id"])
         """
         if fn is None:
+
             def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
                 self._compensators[name] = func
                 return func
@@ -681,7 +702,9 @@ class Session:
             )
         return result
 
-    def rollback(self, *, upto: Optional[int] = None, dry_run: bool = False) -> List[Dict[str, Any]]:
+    def rollback(
+        self, *, upto: Optional[int] = None, dry_run: bool = False
+    ) -> List[Dict[str, Any]]:
         """Apply compensations for recorded effects, newest first.
 
         Each compensation is itself an event, so a rollback is replayable and
@@ -806,8 +829,7 @@ class Session:
             request={"at": self.fork_seq},
             response={
                 "forked_at": self.fork_seq,
-                "note": "the recording ended here; everything after this event is "
-                        "counterfactual",
+                "note": "the recording ended here; everything after this event is counterfactual",
                 "parent": self._tape.manifest.get("parent"),
             },
             meta={"written_by": "Session._go_live"},
@@ -852,36 +874,36 @@ class Session:
             return self._summary or {}
 
         if self._mode == "record":
+            recorder = self._require_recorder()
             summary = {
                 "mode": "record",
                 "tape": str(self._tape.path),
                 "events": self._tape.event_count,
-                "counts": dict(self._recorder.counts),
-                "errors": self._recorder.errors,
+                "counts": dict(recorder.counts),
+                "errors": recorder.errors,
                 "outcome": self._outcome_fingerprint,
                 "states": list(self._state_fingerprints),
                 "effects": len(self._effects),
                 "compensated": sum(1 for e in self._effects if e["compensated"]),
-                "duration_seconds": round(self._recorder.total_duration, 6),
+                "duration_seconds": round(recorder.total_duration, 6),
                 "seed": self._seed,
             }
             self._tape.close(summary=summary)
             summary["digest"] = self._tape.digest
         else:
+            replayer = self._require_replayer()
             should_check = (
-                self._require_full_consumption and not self.forked
-                if check is None
-                else check
+                self._require_full_consumption and not self.forked if check is None else check
             )
             # Always finish the stream: it both makes `remaining` meaningful and
             # releases the event log's file handle.
-            self._replayer.assert_exhausted(require_full=bool(should_check))
+            replayer.assert_exhausted(require_full=bool(should_check))
             summary = {
                 "mode": "replay",
                 "tape": str(self._tape.path),
-                "consumed": self._replayer.consumed,
-                "remaining": len(self._replayer.unconsumed),
-                "divergences": list(self._replayer.divergences),
+                "consumed": replayer.consumed,
+                "remaining": len(replayer.unconsumed),
+                "divergences": list(replayer.divergences),
                 "forked": self.forked,
                 "fork_seq": self.fork_seq,
                 "verified": self.verified and not self.forked,
@@ -897,7 +919,7 @@ class Session:
                 )
             # Release the event stream's file handle. On Windows a live handle
             # blocks the tape directory from being moved or deleted.
-            self._replayer.close()
+            replayer.close()
 
         self._closed = True
         self._summary = summary
@@ -916,10 +938,9 @@ class Session:
     def __enter__(self) -> "Session":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(self, exc_type, exc, tb) -> None:
         # An exception from the body must not be masked by a completion check.
         self.close(check=False if exc_type is not None else None)
-        return False
 
     def __repr__(self) -> str:  # pragma: no cover - cosmetic
         return "<Session mode={} tape={} digest={}>".format(

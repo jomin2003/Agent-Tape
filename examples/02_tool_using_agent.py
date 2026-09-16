@@ -48,7 +48,7 @@ def search_index(query):
     return KNOWLEDGE.get(query, [])
 
 
-def run_agent(session, model, corpus_path):
+def run_agent(session, model):
     """Plan -> act -> observe, with a bounded number of steps."""
     session.mark("start", goal="answer a support question")
 
@@ -63,7 +63,10 @@ def run_agent(session, model, corpus_path):
         decision = session.model(
             "scripted-model",
             {"messages": context, "temperature": 0.0, "step": step},
-            fn=lambda: model(context, 0.0),
+            # The loop variable is bound explicitly. The callable is invoked
+            # synchronously so capturing it by reference would work here, but
+            # binding makes that independent of the caller's behaviour.
+            fn=lambda messages=context: model(messages, 0.0),
         )
 
         if decision["action"] == "answer":
@@ -73,12 +76,17 @@ def run_agent(session, model, corpus_path):
             return answer
 
         query = decision["query"]
-        hits = session.tool("search", [query], kwargs={"k": 3},
-                            fn=lambda: search_index(query))
-        context = context + [{"role": "tool", "content": hits}]
+        hits = session.tool(
+            "search",
+            [query],
+            kwargs={"k": 3},
+            fn=lambda q=query: search_index(q),
+        )
+        context = [*context, {"role": "tool", "content": hits}]
 
-        session.log("step complete", step=step, jitter=jitter,
-                    elapsed=session.clock.time() - started)
+        session.log(
+            "step complete", step=step, jitter=jitter, elapsed=session.clock.time() - started
+        )
 
     raise RuntimeError("agent did not converge")
 
@@ -86,20 +94,18 @@ def run_agent(session, model, corpus_path):
 def main() -> None:
     workspace = Path(tempfile.mkdtemp(prefix="agenttape-example-"))
     tape = workspace / "support.tape"
-    corpus = workspace / "corpus.txt"
-    corpus.write_text("Refund policy: 30 days.\n", encoding="utf-8")
 
     try:
         print("== recording ==")
         with agenttape.record(tape, tags=["support"], meta={"task": "sla question"}) as session:
-            answer = run_agent(session, FakeModel(), corpus)
+            answer = run_agent(session, FakeModel())
         print("answer: {!r}".format(answer))
         print("counts: {}".format(agenttape.Tape.describe(tape)["counts"]))
         print()
 
         print("== replaying (fresh model instance, so the agent really re-runs) ==")
         with agenttape.replay(tape) as session:
-            replayed = run_agent(session, FakeModel(), corpus)
+            replayed = run_agent(session, FakeModel())
         print("answer: {!r}".format(replayed))
         print("verified: {}".format(session.verified))
         assert replayed == answer
@@ -111,22 +117,26 @@ def main() -> None:
         started = time.perf_counter()
         for _ in range(20):
             with agenttape.replay(tape) as session:
-                run_agent(session, FakeModel(), corpus)
+                run_agent(session, FakeModel())
         elapsed = time.perf_counter() - started
         print("20 replays in {:.3f}s".format(elapsed))
         print()
 
         print("== the run, event by event ==")
         for event in agenttape.Tape.open(tape).iter_events():
-            print("  {:>2}  {:<8} {:<16} {}".format(
-                event.seq, event.kind, event.name,
-                "ok" if event.ok else "ERROR"))
+            print(
+                "  {:>2}  {:<8} {:<16} {}".format(
+                    event.seq, event.kind, event.name, "ok" if event.ok else "ERROR"
+                )
+            )
         print()
-        print(agenttape.check_determinism(
-            tape,
-            lambda session: run_agent(session, FakeModel(), corpus),
-            repeats=3,
-        ).render())
+        print(
+            agenttape.check_determinism(
+                tape,
+                lambda session: run_agent(session, FakeModel()),
+                repeats=3,
+            ).render()
+        )
 
     finally:
         shutil.rmtree(workspace, ignore_errors=True)

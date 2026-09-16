@@ -154,8 +154,11 @@ def main() -> None:
             session.compensator("refund", counterfactual.refund)
             session.compensator("release", counterfactual.release)
             result = booking_agent(session, counterfactual, seat="15A", retry="14C")
-            print("  forked at seq {} (the recording had {} events)".format(
-                session.fork_seq, session.fork_seq))
+            print(
+                "  forked at seq {} (the recording had {} events)".format(
+                    session.fork_seq, session.fork_seq
+                )
+            )
 
         print("  result: {}".format(result))
         print("  ledger: {}".format(counterfactual.ledger))
@@ -167,10 +170,14 @@ def main() -> None:
         print("== 4. the original recording is untouched ==")
         original_report = agenttape.verify(tape)
         fork_report = agenttape.verify(fork)
-        print("  original: {} events, digest {}".format(
-            original_report.events, original_report.digest[:12]))
-        print("  fork:     {} events, digest {}".format(
-            fork_report.events, fork_report.digest[:12]))
+        print(
+            "  original: {} events, digest {}".format(
+                original_report.events, original_report.digest[:12]
+            )
+        )
+        print(
+            "  fork:     {} events, digest {}".format(fork_report.events, fork_report.digest[:12])
+        )
         print("  fork parent: {}".format(agenttape.Tape.describe(fork)["parent"]["path"]))
         print()
 

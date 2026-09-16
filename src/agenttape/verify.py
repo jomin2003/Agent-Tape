@@ -183,8 +183,9 @@ def verify(path: Any, *, check_blobs: bool = True, check_digest: bool = True) ->
                 chain_ok = False
                 report.first_bad_seq = index
                 report.problems.append(
-                    "seq {}: broken chain -- event claims predecessor {}, expected "
-                    "{}".format(index, short_hash(body.get("prev") or ""), short_hash(prev))
+                    "seq {}: broken chain -- event claims predecessor {}, expected {}".format(
+                        index, short_hash(body.get("prev") or ""), short_hash(prev)
+                    )
                 )
                 break
 
@@ -199,7 +200,7 @@ def verify(path: Any, *, check_blobs: bool = True, check_digest: bool = True) ->
                 break
 
             kind = body.get("kind")
-            if kind != EventKind.FOOTER:
+            if isinstance(kind, str) and kind != EventKind.FOOTER:
                 counts[kind] = counts.get(kind, 0) + 1
 
             prev = declared
@@ -234,10 +235,7 @@ def verify(path: Any, *, check_blobs: bool = True, check_digest: bool = True) ->
                 report.problems.append(str(exc))
 
     report.ok = (
-        report.chain_ok
-        and report.digest_matches
-        and report.blobs_ok
-        and not report.problems
+        report.chain_ok and report.digest_matches and report.blobs_ok and not report.problems
     )
     return report
 
@@ -334,21 +332,19 @@ def diff(a: Any, b: Any, *, strict: bool = False) -> TapeDiff:
         event_a = next(stream_a, None)
         event_b = next(stream_b, None)
 
-        if event_a is None and event_b is None:
-            result.identical = True
-            result.common_events = index
-            return result
-
-        if event_a is None:
-            result.first_difference_seq = index
-            result.reason = "the second tape is longer"
-            result.observed = event_b.identity()
-            return result
-
-        if event_b is None:
-            result.first_difference_seq = index
-            result.reason = "the first tape is longer"
-            result.expected = event_a.identity()
+        if event_a is None or event_b is None:
+            # One tape ran out. Both running out means they matched throughout.
+            if event_a is None and event_b is None:
+                result.identical = True
+                result.common_events = index
+            elif event_a is None and event_b is not None:
+                result.first_difference_seq = index
+                result.reason = "the second tape is longer"
+                result.observed = event_b.identity()
+            elif event_a is not None:
+                result.first_difference_seq = index
+                result.reason = "the first tape is longer"
+                result.expected = event_a.identity()
             return result
 
         if event_a.identity() != event_b.identity():
@@ -487,17 +483,20 @@ def check_determinism(
         report.runs.append(record)
 
     if report.runs:
-        first = _comparable(report.runs[0])
-        for run in report.runs[1:]:
-            if _comparable(run) != first:
+        # Named `baseline`/`attempt` rather than `run`: `run` is this function's
+        # callable argument, and shadowing it here was confusing enough that a
+        # type checker flagged it.
+        baseline = _comparable(report.runs[0])
+        for attempt in report.runs[1:]:
+            if _comparable(attempt) != baseline:
                 report.problems.append(
-                    "run {} produced a different trajectory than run 1".format(run["run"])
+                    "run {} produced a different trajectory than run 1".format(attempt["run"])
                 )
-        for run in report.runs:
-            if run.get("remaining"):
+        for attempt in report.runs:
+            if attempt.get("remaining"):
                 report.problems.append(
                     "run {} left {} recorded event(s) unconsumed".format(
-                        run["run"], run["remaining"]
+                        attempt["run"], attempt["remaining"]
                     )
                 )
 

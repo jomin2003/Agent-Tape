@@ -37,8 +37,7 @@ def well_behaved_agent(session, question="Is this urgent?"):
 
     answer = session.model(
         "mock-llm-1",
-        {"messages": [{"role": "user", "content": question}],
-         "temperature": round(temperature, 4)},
+        {"messages": [{"role": "user", "content": question}], "temperature": round(temperature, 4)},
         fn=lambda: "{}: urgent".format(plan),
     )
 
@@ -54,7 +53,7 @@ def leaky_agent(session, question="Is this urgent?"):
     `random` or `time` directly looks like from the outside. The session cannot
     record what it was not asked to do.
     """
-    jitter = random.random()                       # <-- not recorded
+    jitter = random.random()  # <-- not recorded
     answer = session.model(
         "mock-llm-1",
         {"messages": [{"role": "user", "content": question}], "temperature": 0.0},
@@ -100,10 +99,16 @@ def main() -> None:
 
         # ------------------------------------------------------------------ #
         print("== 3. the same two tapes, compared structurally ==")
-        print("well-behaved agent event kinds: {}".format(
-            sorted(agenttape.Tape.describe(good_tape)["counts"])))
-        print("leaky agent event kinds:        {}".format(
-            sorted(agenttape.Tape.describe(leaky_tape)["counts"])))
+        print(
+            "well-behaved agent event kinds: {}".format(
+                sorted(agenttape.Tape.describe(good_tape)["counts"])
+            )
+        )
+        print(
+            "leaky agent event kinds:        {}".format(
+                sorted(agenttape.Tape.describe(leaky_tape)["counts"])
+            )
+        )
         print()
         print("The leaky tape has no 'random' events at all -- the recording simply")
         print("has no idea the value existed. That is what 'the completeness ceiling'")

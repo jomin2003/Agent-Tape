@@ -51,7 +51,7 @@ import sys
 import time
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, TextIO, Union
 
 from ._version import TAPE_FORMAT_VERSION, __version__
 from .canonical import (
@@ -98,7 +98,7 @@ class Tape:
         self._path = Path(path)
         self._manifest = manifest
         self._writable = writable
-        self._fh = None
+        self._fh: Optional[TextIO] = None
         self._closed = bool(manifest.get("closed"))
         self._last_hash = manifest.get("digest") or GENESIS
         self._count = int(manifest.get("event_count") or 0)
@@ -139,8 +139,7 @@ class Tape:
         if target.exists():
             if not overwrite:
                 raise TapeError(
-                    "a tape already exists at {}. Pass overwrite=True to replace "
-                    "it.".format(target)
+                    "a tape already exists at {}. Pass overwrite=True to replace it.".format(target)
                 )
             cls._safe_remove(target)
         target.mkdir(parents=True, exist_ok=True)
@@ -354,13 +353,15 @@ class Tape:
         if self._fh is not None:
             return
         self._path.mkdir(parents=True, exist_ok=True)
-        self._fh = open(self._path / EVENTS_NAME, "a", encoding="utf-8", newline="\n")
+        # The handle is owned by this Tape for its whole lifetime and is closed
+        # in close(), so a context manager would be the wrong shape here.
+        self._fh = open(  # noqa: SIM115
+            self._path / EVENTS_NAME, "a", encoding="utf-8", newline="\n"
+        )
 
     def _require_writable(self) -> None:
         if not self._writable:
-            raise TapeError(
-                "tape at {} was opened read-only".format(self._path)
-            )
+            raise TapeError("tape at {} was opened read-only".format(self._path))
         if self._closed:
             raise TapeError(
                 "tape at {} is closed; no further events may be appended".format(self._path)
@@ -420,12 +421,18 @@ class Tape:
         self._write_stored(stored)
 
     def _write_stored(self, stored: Dict[str, Any]) -> None:
+        handle = self._fh
+        if handle is None:
+            # Unreachable via append()/_append_verbatim(), both of which call
+            # _require_writable() first. Kept explicit so the failure is a clear
+            # message rather than an AttributeError on None.
+            raise TapeError("no open event log for {}".format(self._path))
         line = canonical_dumps(stored)
-        self._fh.write(line + "\n")
+        handle.write(line + "\n")
         # Durability ordering: the event is on disk before the caller sees the
         # value. Without the fsync, a crash can produce a holed log.
-        self._fh.flush()
-        os.fsync(self._fh.fileno())
+        handle.flush()
+        os.fsync(handle.fileno())
 
     def _encode_body(self, body: Dict[str, Any]) -> Dict[str, Any]:
         """Replace oversized top-level payloads with blob references.
@@ -658,9 +665,7 @@ class Tape:
             self.close(summary={"aborted": exc_type is not None})
 
     def __repr__(self) -> str:  # pragma: no cover - cosmetic
-        return "<Tape {} events={} closed={}>".format(
-            self._path, self._count, self._closed
-        )
+        return "<Tape {} events={} closed={}>".format(self._path, self._count, self._closed)
 
     # ------------------------------------------------------------------ #
     # Helpers
@@ -686,9 +691,9 @@ class Tape:
         looks_like_tape = False
         if manifest.is_file():
             try:
-                looks_like_tape = json.loads(
-                    manifest.read_text(encoding="utf-8")
-                ).get("format") == FORMAT_NAME
+                looks_like_tape = (
+                    json.loads(manifest.read_text(encoding="utf-8")).get("format") == FORMAT_NAME
+                )
             except ValueError:
                 looks_like_tape = False
         if not looks_like_tape:

@@ -24,7 +24,7 @@ call site.
 import agenttape
 
 with agenttape.record("runs/x.tape") as session:
-    ...   # what would you like to be able to write?
+    ...  # what would you like to be able to write?
 ```
 
 ## Does it fit the scope?

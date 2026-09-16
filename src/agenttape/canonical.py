@@ -74,13 +74,12 @@ def _key_to_str(key: Any, *, strict: bool) -> str:
     """Render a mapping key as a string without collisions.
 
     Plain strings pass through untouched (so ordinary dicts look ordinary).
-    Anything else is prefixed with ``"\\x00"``, which cannot appear at the start
-    of a legitimate string key in practice, and encoded canonically.
+    Anything else is prefixed with ``"\\x00"``, which a legitimate string key
+    cannot start with in practice, and encoded canonically. That is what stops
+    ``{1: "a"}`` and ``{"1": "a"}`` from colliding.
     """
     if isinstance(key, str):
         return key
-    if isinstance(key, bool) or isinstance(key, int) or isinstance(key, float) or key is None:
-        return "\x00" + canonical_dumps(key, strict=strict)
     return "\x00" + canonical_dumps(key, strict=strict)
 
 
@@ -104,8 +103,9 @@ def to_canonical(value: Any, *, strict: bool = True, _depth: int = 0) -> Any:
     """
     if _depth > MAX_DEPTH:
         raise CanonicalizationError(
-            "value nesting exceeded {} levels; the structure is probably "
-            "self-referential".format(MAX_DEPTH)
+            "value nesting exceeded {} levels; the structure is probably self-referential".format(
+                MAX_DEPTH
+            )
         )
 
     # ``bool`` must be tested before ``int``: in Python, bool is a subclass of int.

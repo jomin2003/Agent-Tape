@@ -8,6 +8,8 @@ does not exist, an undocumented callable.
 from __future__ import annotations
 
 import ast
+import importlib.util
+import os
 import pathlib
 import re
 import sys
@@ -15,7 +17,6 @@ import sys
 import pytest
 
 import agenttape as at
-
 
 # --------------------------------------------------------------------------- #
 # Surface
@@ -127,20 +128,44 @@ def test_module_docstring_explains_the_limits():
 # Project constraints
 # --------------------------------------------------------------------------- #
 
-STDLIB = set(getattr(sys, "stdlib_module_names", ()))
+#: Present from Python 3.10. Empty on 3.9, which is why the path check exists.
+STDLIB_NAMES = set(getattr(sys, "stdlib_module_names", ()))
+
+#: Directories that hold installed distributions rather than the standard library.
+THIRD_PARTY_MARKERS = ("site-packages", "dist-packages")
+
 PACKAGE_DIR = pathlib.Path(at.__file__).parent
 
 
+def _is_third_party(root):
+    """Return ``True`` if *root* resolves to an installed distribution.
+
+    ``sys.stdlib_module_names`` does not exist before Python 3.10, so the
+    fallback asks where the module actually lives. That path check is the more
+    robust test anyway: it works inside a virtualenv, where the standard library
+    and ``site-packages`` share a prefix.
+    """
+    if root in STDLIB_NAMES or root in sys.builtin_module_names:
+        return False
+    try:
+        spec = importlib.util.find_spec(root)
+    except (ImportError, ValueError, AttributeError):
+        return False
+    if spec is None or spec.origin in (None, "built-in", "frozen"):
+        return False
+    origin = os.path.abspath(spec.origin)
+    return any(os.sep + marker + os.sep in origin + os.sep for marker in THIRD_PARTY_MARKERS)
+
+
 def _imported_roots(path):
+    """Return the top-level module names imported by a source file."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     roots = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            for alias in node.names:
-                roots.add(alias.name.split(".")[0])
-        elif isinstance(node, ast.ImportFrom):
-            if node.level == 0 and node.module:
-                roots.add(node.module.split(".")[0])
+            roots.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
     return roots
 
 
@@ -148,15 +173,34 @@ def test_runtime_has_no_third_party_dependencies():
     """A replay engine sits under the agent; every dependency it adds is inherited."""
     external = {}
     for path in sorted(PACKAGE_DIR.glob("*.py")):
-        roots = _imported_roots(path)
-        foreign = {
+        foreign = sorted(
             root
-            for root in roots
-            if root not in STDLIB and root != "agenttape" and not root.startswith("_")
-        }
+            for root in _imported_roots(path)
+            if root != "agenttape" and not root.startswith("_") and _is_third_party(root)
+        )
         if foreign:
-            external[path.name] = sorted(foreign)
+            external[path.name] = foreign
     assert external == {}, "third-party imports found: {}".format(external)
+
+
+def test_the_dependency_check_can_actually_detect_a_dependency(tmp_path):
+    """Guard against the check silently going vacuous.
+
+    It did exactly that on Python 3.9, where ``sys.stdlib_module_names`` does not
+    exist: every stdlib import was reported as third-party and the test failed
+    for the wrong reason. A guard that cannot fail is not a guard.
+    """
+    module = tmp_path / "fake.py"
+    module.write_text("import json\nimport os\nimport pytest\n", encoding="utf-8")
+
+    assert _imported_roots(module) == {"json", "os", "pytest"}
+    assert _is_third_party("pytest")
+    assert not _is_third_party("json")
+    assert not _is_third_party("os")
+    assert not _is_third_party("sys")
+    # agenttape is excluded by *name* in the check above, not by location: from
+    # a wheel it resolves inside site-packages, and from a checkout inside src/.
+    assert not _is_third_party("a_module_that_does_not_exist")
 
 
 def test_there_is_no_console_entry_point():

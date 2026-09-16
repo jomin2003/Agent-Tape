@@ -58,7 +58,7 @@ def changed_prompt(session, question="Who handles enterprise escalations?"):
         "mock-llm-1",
         {
             "messages": [
-                {"role": "system", "content": "Be concise."},   # <-- new
+                {"role": "system", "content": "Be concise."},  # <-- new
                 {"role": "user", "content": question},
             ],
             "temperature": 0.0,
@@ -112,8 +112,7 @@ def main() -> None:
         with agenttape.record(tape) as session:
             golden_agent(session)
 
-        print("golden run recorded: {} events".format(
-            agenttape.Tape.describe(tape)["event_count"]))
+        print("golden run recorded: {} events".format(agenttape.Tape.describe(tape)["event_count"]))
         print()
 
         report("1. unchanged agent (control)", tape, golden_agent)
@@ -130,11 +129,13 @@ def main() -> None:
             reordered_calls(session)
             print("  completed, but verified={}".format(session.verified))
             for record in session.divergences:
-                print("  divergence at seq {}: expected {}, observed {}".format(
-                    record["seq"],
-                    (record["expected"] or {}).get("name"),
-                    record["observed"]["name"],
-                ))
+                print(
+                    "  divergence at seq {}: expected {}, observed {}".format(
+                        record["seq"],
+                        (record["expected"] or {}).get("name"),
+                        record["observed"]["name"],
+                    )
+                )
         print()
 
         # ------------------------------------------------------------------ #

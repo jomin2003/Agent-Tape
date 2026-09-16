@@ -6,6 +6,12 @@
 
 Record AI agent runs to local files. Replay them offline, deterministically.
 
+[![CI](https://github.com/jomin2003/Agent-Tape/actions/workflows/ci.yml/badge.svg)](https://github.com/jomin2003/Agent-Tape/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
+[![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](pyproject.toml)
+[![Tests](https://img.shields.io/badge/tests-273-brightgreen.svg)](tests)
+
 Pure Python · zero runtime dependencies · library only
 
 </div>
@@ -71,9 +77,9 @@ instrumentation.
 ```python
 import agenttape
 
+
 def run_agent(session):
-    hits = session.tool("search", ["refund policy"],
-                        fn=lambda: search("refund policy"))
+    hits = session.tool("search", ["refund policy"], fn=lambda: search("refund policy"))
     answer = session.model(
         "gpt-4o",
         {"messages": [{"role": "user", "content": hits}], "temperature": 0.0},
@@ -81,6 +87,7 @@ def run_agent(session):
     )
     session.outcome({"answer": answer})
     return answer
+
 
 # Record: real calls, real money, real side effects.
 with agenttape.record("runs/triage.tape") as session:
@@ -243,12 +250,16 @@ with agenttape.record("runs/booking.tape") as session:
     def refund(payload, result):
         return payments.refund(result["charge_id"])
 
-    session.effect("charge_card", charge, args=("acct_1", 100),
-                   compensate=("refund", {"reason": "booking aborted"}))
+    session.effect(
+        "charge_card",
+        charge,
+        args=("acct_1", 100),
+        compensate=("refund", {"reason": "booking aborted"}),
+    )
     session.effect("reserve_seat", reserve, args=("seat_14C",))
 
     if not session.tool("confirm", ["seat_14C"], fn=confirm):
-        session.rollback()          # newest first; already-compensated effects skipped
+        session.rollback()  # newest first; already-compensated effects skipped
 ```
 
 Replay the tape and `rollback()` reproduces the same sequence of compensations
@@ -261,8 +272,9 @@ Fork a recording at a point of interest, replay the prefix, then continue live
 into a new tape. The original is never touched.
 
 ```python
-with agenttape.replay("runs/x.tape", on_exhausted="live",
-                      fork_to="runs/x-counterfactual.tape") as session:
+with agenttape.replay(
+    "runs/x.tape", on_exhausted="live", fork_to="runs/x-counterfactual.tape"
+) as session:
     run_agent_with_a_different_prompt(session)
 ```
 
@@ -272,9 +284,9 @@ the two runs parted.
 ### Verification
 
 ```python
-agenttape.verify(path)                     # chain, digest, blobs -> TapeReport
-agenttape.diff(a, b)                       # first difference between two tapes
-agenttape.check_determinism(path, run)     # does this recording actually replay?
+agenttape.verify(path)  # chain, digest, blobs -> TapeReport
+agenttape.diff(a, b)  # first difference between two tapes
+agenttape.check_determinism(path, run)  # does this recording actually replay?
 ```
 
 `check_determinism` is the self-test for a tape: it replays *n* times and confirms
@@ -474,7 +486,7 @@ Full reference: [`docs/api.md`](docs/api.md).
 ## Testing
 
 ```bash
-pytest                       # ~270 tests, a few seconds, no network
+pytest                       # 273 tests, a few seconds, no network
 pytest --cov=agenttape
 ```
 

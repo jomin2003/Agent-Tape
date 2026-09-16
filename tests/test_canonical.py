@@ -21,7 +21,6 @@ import agenttape as at
 from agenttape import canonical_dumps, canonical_loads, fingerprint, from_canonical, to_canonical
 from agenttape.errors import CanonicalizationError
 
-
 # --------------------------------------------------------------------------- #
 # Determinism
 # --------------------------------------------------------------------------- #

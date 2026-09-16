@@ -99,8 +99,20 @@ class EventKind:
 
     #: Every kind, for validation and reporting.
     ALL = (
-        RECORD, MODEL, TOOL, CLOCK, RANDOM, ENV, EFFECT,
-        COMPENSATE, FORK, STATE, OUTCOME, MARK, LOG, FOOTER,
+        RECORD,
+        MODEL,
+        TOOL,
+        CLOCK,
+        RANDOM,
+        ENV,
+        EFFECT,
+        COMPENSATE,
+        FORK,
+        STATE,
+        OUTCOME,
+        MARK,
+        LOG,
+        FOOTER,
     )
 
 
@@ -167,8 +179,18 @@ class Event:
         written by a newer version of the library is still readable.
         """
         known = {
-            "seq", "kind", "name", "ts", "key", "request", "response",
-            "status", "error", "duration", "meta", "prev",
+            "seq",
+            "kind",
+            "name",
+            "ts",
+            "key",
+            "request",
+            "response",
+            "status",
+            "error",
+            "duration",
+            "meta",
+            "prev",
         }
         data = {k: v for k, v in body.items() if k in known}
         extra = {k: v for k, v in body.items() if k not in known}
@@ -196,9 +218,7 @@ class Event:
         detail = canonical_dumps(self.request, strict=False)
         if len(detail) > limit:
             detail = detail[: limit - 3] + "..."
-        marker = "" if self.ok else " [{}]".format(
-            (self.error or {}).get("type", "error")
-        )
+        marker = "" if self.ok else " [{}]".format((self.error or {}).get("type", "error"))
         return "{} {}{}".format(self.label(), detail, marker)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -254,7 +274,7 @@ def rebuild_error(record: Dict[str, Any]) -> BaseException:
                     exc = candidate(message)
                 except Exception:  # pragma: no cover - exotic __init__ signatures
                     break
-                setattr(exc, "agenttape_record", record)
+                exc.agenttape_record = record  # type: ignore[attr-defined]
                 return exc
 
     return RecordedError(record)

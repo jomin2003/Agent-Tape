@@ -29,7 +29,9 @@ def call_model(messages):
     """Pretend to call an LLM. Records that it was called, so we can prove it wasn't."""
     CALLS.append("model")
     question = messages[-1]["content"]
-    return "Refunds are available within 30 days of purchase."
+    if "refund" in question.lower():
+        return "Refunds are available within 30 days of purchase."
+    return "I don't have an answer for that."
 
 
 def search(query):

@@ -94,9 +94,10 @@ def test_label_and_summary_are_readable():
     event = make_event()
     assert event.label() == "#0 tool:search"
     assert "search" in event.summary()
-    assert "[ValueError]" in make_event(
-        status="error", error={"type": "ValueError", "message": "bad"}
-    ).summary()
+    assert (
+        "[ValueError]"
+        in make_event(status="error", error={"type": "ValueError", "message": "bad"}).summary()
+    )
 
 
 def test_to_dict_includes_the_hash():
@@ -116,9 +117,7 @@ def test_rebuild_error_restores_a_builtin_exception_type():
 
 
 def test_rebuild_error_restores_a_third_party_exception_type():
-    rebuilt = rebuild_error(
-        {"type": "KeyError", "module": "builtins", "message": "'missing'"}
-    )
+    rebuilt = rebuild_error({"type": "KeyError", "module": "builtins", "message": "'missing'"})
     assert isinstance(rebuilt, KeyError)
 
 

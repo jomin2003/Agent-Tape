@@ -24,10 +24,10 @@ deterministically.
 import agenttape
 
 with agenttape.record("runs/x.tape") as session:
-    run_agent(session)              # real calls, real side effects
+    run_agent(session)  # real calls, real side effects
 
 with agenttape.replay("runs/x.tape") as session:
-    run_agent(session)              # same trajectory, offline, free
+    run_agent(session)  # same trajectory, offline, free
 ```
 
 Everything else is detail.

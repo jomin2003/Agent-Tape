@@ -28,8 +28,9 @@ function and the session calls around the failing boundary.
 ```python
 import agenttape
 
+
 def run_agent(session):
-    ...
+    raise NotImplementedError("paste your agent here")
 ```
 
 ## Tape
@@ -39,6 +40,7 @@ useful thing you can attach — or a minimal one you built:
 
 ```python
 import agenttape
+
 print(agenttape.verify("path/to/tape").render())
 print(agenttape.Tape.describe("path/to/tape"))
 ```

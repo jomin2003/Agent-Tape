@@ -63,6 +63,11 @@ for the pattern — the ledger assertion that stays empty is the important one.
 
 - Formatting and linting are handled by [Ruff](https://docs.astral.sh/ruff/):
   `ruff format .` and `ruff check .`.
+- **Ruff also formats Python code blocks inside Markdown.** That is deliberate —
+  it keeps the examples in `README.md` and `docs/` syntactically valid and
+  consistently styled. The consequence is that a fenced `python` block is not a
+  free-form drawing surface; write code that formats well, and avoid relying on
+  manual alignment inside a code fence.
 - Line length is 100. Target Python 3.9, so no `match`, no `X | Y` at runtime, no
   `StrEnum`, no `slots=True`.
 - Type hints on everything public. `mypy src/agenttape` should stay clean.
@@ -95,6 +100,7 @@ tape directory (or a minimal one you built), plus the output of:
 
 ```python
 import agenttape
+
 print(agenttape.verify("path/to/tape").render())
 print(agenttape.Tape.describe("path/to/tape"))
 ```

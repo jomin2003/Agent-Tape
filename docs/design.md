@@ -240,8 +240,12 @@ transactions, which must be idempotent because retries are guaranteed.
 recorded in the tape, alongside the effect.**
 
 ```python
-session.effect("charge_card", charge, args=("acct_1", 100),
-               compensate=("refund", {"reason": "booking aborted"}))
+session.effect(
+    "charge_card",
+    charge,
+    args=("acct_1", 100),
+    compensate=("refund", {"reason": "booking aborted"}),
+)
 ```
 
 Three consequences:
@@ -275,8 +279,9 @@ rather than silent.
 Fork the recording, replay the prefix, and continue live into a new tape:
 
 ```python
-with agenttape.replay("runs/x.tape", on_exhausted="live",
-                      fork_to="runs/x-counterfactual.tape") as session:
+with agenttape.replay(
+    "runs/x.tape", on_exhausted="live", fork_to="runs/x-counterfactual.tape"
+) as session:
     run_agent_with_a_change(session)
 ```
 

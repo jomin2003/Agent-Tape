@@ -12,6 +12,46 @@ wrote them, so format breaks are treated as a last resort.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`DeterministicRandom` raised `TypeError` on Python 3.9 and 3.10.** The
+  constructor called `super().__init__(seed)`, but before Python 3.11
+  `random.Random` does not define `__init__` — it is a C type that seeds in
+  `__new__` — so the call resolved to `object.__init__` and raised
+  `Random() requires 0 or 1 argument`. Any agent that touched `session.rng` was
+  unusable on those versions. It now calls `self.seed(seed)`, which exists on
+  every supported version. Caught by the CI matrix; a local 3.13 environment
+  cannot see it.
+- The third-party-dependency guard in the test suite was vacuous on Python 3.9,
+  where `sys.stdlib_module_names` does not exist: it reported every standard
+  library import as third-party and failed for the wrong reason. The check now
+  falls back to asking where each module resolves on disk, and a meta-test
+  asserts that the guard can actually detect a dependency.
+
+### Changed
+
+- The `package` CI job now installs the built wheel into a clean environment and
+  runs the whole suite against it, with `src/` not importable. This catches a
+  wheel that imports but is missing a module — and it caught exactly that class
+  of mistake in a new test the first time it ran.
+- Narrowed the Ruff rule selection to a correctness-focused set (`E`, `F`, `W`,
+  `I`, `B`, `C4`, `SIM`, `RUF`) and dropped `UP`, `N`, `PTH`, `ARG`, `RET` and
+  `TCH`. Their findings here were stylistic preferences rather than defects, and
+  `UP` would have rewritten ~200 `str.format()` calls into f-strings for no
+  functional gain.
+- `mypy` no longer pins `python_version = "3.9"`. mypy has dropped the ability to
+  target 3.9 while this package still supports it, so pinning it would make the
+  config contradict `requires-python`. Python 3.9 compatibility is guarded by the
+  3.9 job in the CI matrix.
+- Resolved all `mypy` findings, including a shadowed parameter name in
+  `check_determinism` and untyped `Tape._fh`.
+
+### Added
+
+- `test_integrity_and_payload_availability_fail_independently`, which pins the
+  reason the event hash covers the body *as stored* rather than the logical one:
+  tamper detection must not depend on payloads being resolvable.
+
 ## [0.1.0] - 2026-09-17
 
 Initial release.

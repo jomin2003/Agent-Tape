@@ -44,13 +44,21 @@ class DeterministicRandom(random.Random):
     debugging.
     """
 
-    #: Set so that ``copy``/``pickle`` do not try to serialise the session.
-    _agenttape_session = None
+    #: The session this generator draws its entropy from.
+    _agenttape_session: "Session"
 
     def __init__(self, session: "Session", seed: Optional[int] = None) -> None:
-        # Assign before super().__init__(): seeding must not touch a missing channel.
+        # The channel must be in place before seeding, because seeding must not
+        # touch a missing attribute.
         self._agenttape_session = session
-        super().__init__(seed)
+        # Call seed() rather than super().__init__().
+        #
+        # Before Python 3.11, random.Random does not define __init__ -- it is a
+        # C type that seeds in __new__ -- so super().__init__(seed) resolves to
+        # object.__init__ and raises "Random() requires 0 or 1 argument". seed()
+        # exists on every supported version and is the documented entry point.
+        # Found by CI on the 3.9 and 3.10 jobs; a local 3.13 venv never sees it.
+        self.seed(seed)
 
     # -- the two primitives everything else is built on --------------------- #
 

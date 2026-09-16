@@ -31,7 +31,7 @@ def test_replay_reproduces_the_recorded_trajectory(recorded):
 
 
 def test_replay_never_invokes_the_wrapped_callables(recorded):
-    path, agent = recorded
+    path, _agent = recorded
     calls = []
 
     def agent_that_would_call_live(session):

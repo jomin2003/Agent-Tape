@@ -109,12 +109,23 @@ jobs:
       - name: Check metadata
         run: python -m twine check dist/*
 
-      - name: Install the wheel and run the suite against it
+      - name: Install the wheel into a clean environment
         run: |
           python -m venv /tmp/installed
+          /tmp/installed/bin/python -m pip install --upgrade pip
           /tmp/installed/bin/python -m pip install dist/*.whl pytest
-          cd /tmp
-          /tmp/installed/bin/python -c "import agenttape; print(agenttape.__version__)"
+          /tmp/installed/bin/python -c "import agenttape; print('imported', agenttape.__version__)"
+
+      - name: Run the suite against the installed wheel
+        # Guards against a wheel that imports fine but is missing a module, or
+        # that ships tests/examples it should not. The suite is copied out of the
+        # checkout so that `src/` is not importable and the installed package is
+        # the only thing under test.
+        run: |
+          mkdir -p /tmp/wheel-test
+          cp -r tests /tmp/wheel-test/tests
+          cd /tmp/wheel-test
+          /tmp/installed/bin/python -m pytest tests -q -p no:cacheprovider
 
       - uses: actions/upload-artifact@v4
         with:

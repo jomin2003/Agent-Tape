@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 import agenttape as at
-from agenttape.errors import TapeExhaustedError, TapeError
+from agenttape.errors import TapeError, TapeExhaustedError
 
 
 @pytest.fixture

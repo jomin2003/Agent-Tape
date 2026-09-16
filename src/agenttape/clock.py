@@ -41,15 +41,11 @@ class DeterministicClock:
 
     def time(self) -> float:
         """Seconds since the Unix epoch, as recorded."""
-        return self._session.exchange(
-            EventKind.CLOCK, "time.time", {}, fn=time.time
-        )
+        return self._session.exchange(EventKind.CLOCK, "time.time", {}, fn=time.time)
 
     def monotonic(self) -> float:
         """Monotonic seconds, as recorded. Not comparable across runs."""
-        return self._session.exchange(
-            EventKind.CLOCK, "time.monotonic", {}, fn=time.monotonic
-        )
+        return self._session.exchange(EventKind.CLOCK, "time.monotonic", {}, fn=time.monotonic)
 
     # -- derived ------------------------------------------------------------ #
 
