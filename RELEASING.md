@@ -32,7 +32,7 @@ re-check that `python -m build` still succeeds.
       `NOTICE` present.
 - [x] `python -m build && python -m twine check dist/*` passes on both sdist and
       wheel; the wheel contains only the package, `py.typed`, and the licenses.
-- [x] 344 tests pass; all five examples run offline.
+- [x] 354 tests pass; all five examples run offline.
 - [x] `git log` contains no secrets, no tapes, and no files over 100 KB.
 - [x] The CI workflow covers Python 3.9–3.13 on Linux, macOS and Windows.
 - [x] `SECURITY.md` is present so GitHub surfaces the private reporting flow.
