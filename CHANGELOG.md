@@ -59,7 +59,7 @@ tape layout, so `format_version` stays at 1.
 
 ### Added
 
-- 78 tests, taking the suite from 276 to 354, and coverage from 94% to 99%.
+- 79 tests, taking the suite from 276 to 355, and coverage from 94% to 99%.
   They cover the canonical round-trip for every tag, `Tape`'s sequence protocol
   and convenience readers, malformed and truncated tapes, damaged blob stores,
   the full inherited `random.Random` surface, and the divergence-reporting paths

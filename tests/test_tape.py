@@ -565,7 +565,14 @@ def test_overwriting_a_path_that_is_a_file_is_refused(tmp_path):
 
 
 def test_overwriting_a_symbolic_link_is_refused(tmp_path):
-    """An overwrite should not decide whether to follow a link."""
+    """An overwrite should not decide whether to follow a link.
+
+    The precondition is checked rather than assumed. On Windows, ``symlink_to``
+    can raise when the process lacks the privilege -- and it can also return
+    successfully having created *nothing at all*, which is how this test used to
+    fail intermittently instead of skipping. So: skip unless a symlink is really
+    there afterwards.
+    """
     real = tmp_path / "real.tape"
     Tape.create(real).close()
     link = tmp_path / "link.tape"
@@ -573,11 +580,32 @@ def test_overwriting_a_symbolic_link_is_refused(tmp_path):
         link.symlink_to(real, target_is_directory=True)
     except (OSError, NotImplementedError):
         pytest.skip("this platform does not allow creating symlinks unprivileged")
+    if not link.is_symlink():
+        pytest.skip("symlink_to() reported success but produced no symlink here")
 
     with pytest.raises(TapeError, match="symbolic link"):
         Tape.create(link, overwrite=True)
     assert link.is_symlink(), "the link must survive"
     assert real.is_dir(), "the target must survive"
+
+
+def test_overwriting_a_symlink_is_refused_even_where_symlinks_are_unavailable(
+    tmp_path, monkeypatch
+):
+    """The refusal path, exercised on platforms that cannot create a symlink.
+
+    The test above skips there, which would otherwise leave the guard uncovered
+    on Windows CI.
+    """
+    import pathlib as _pathlib
+
+    real = tmp_path / "real.tape"
+    Tape.create(real).close()
+
+    monkeypatch.setattr(_pathlib.Path, "is_symlink", lambda self: True)
+    with pytest.raises(TapeError, match="symbolic link"):
+        Tape.create(real, overwrite=True)
+    assert real.is_dir(), "nothing may have been removed"
 
 
 def test_overwriting_an_empty_directory_removes_it(tmp_path):
