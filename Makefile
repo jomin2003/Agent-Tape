@@ -7,7 +7,7 @@ PYTHON ?= python
 SOURCES := src tests examples
 
 .DEFAULT_GOAL := help
-.PHONY: help install test test-random examples lint format types check build clean dist
+.PHONY: help install test test-random examples lint format types check mutation build clean dist
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -42,6 +42,9 @@ types: ## Type-check the package
 	mypy src/agenttape
 
 check: lint types test ## Everything CI runs
+
+mutation: ## Break the library on purpose and check the tests notice (slow)
+	$(PYTHON) tools/mutation_check.py
 
 build: clean ## Build sdist and wheel
 	$(PYTHON) -m build

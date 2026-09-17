@@ -82,6 +82,28 @@ for the pattern — the ledger assertion that stays empty is the important one.
 - Tests must not depend on wall-clock time, network access, or the order in which
   they run.
 
+### Checking that the tests protect anything
+
+Coverage tells you which lines *execute*. It does not tell you which lines are
+*protected* — a line can be fully covered and completely untested if the only
+test that reaches it walks the happy path through it.
+
+`tools/mutation_check.py` applies a curated defect to the source, runs the suite,
+restores the file, and reports whether the suite noticed:
+
+```bash
+python tools/mutation_check.py          # all of them, ~2 minutes
+python tools/mutation_check.py --only rollback
+```
+
+Run it when you change something load-bearing — the tape format, the matching
+engine, rollback, or verification. Each mutation corresponds to a promise the
+documentation makes. If one survives, either the promise is untested or the code
+no longer honours it; both are worth knowing before you push.
+
+It is deliberately not part of `make check` or CI. Two minutes is fine for an
+occasional audit and wrong for every push.
+
 ## Commits and pull requests
 
 - Conventional commit subjects (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`,

@@ -12,6 +12,24 @@ wrote them, so format breaks are treated as a last resort.
 
 ## [Unreleased]
 
+### Added
+
+- `tools/mutation_check.py`, plus a `make mutation` target. It applies a curated
+  defect to the source, runs the suite, restores the file, and reports whether
+  the suite noticed. Coverage says which lines *execute*; this says which lines
+  are *protected*. The first run found two promises that nothing tested:
+
+  - **Durability.** Deleting the `fsync` before `append` returns left the suite
+    green, even though the README and `docs/design.md` both make the guarantee
+    load-bearing — it is why a crash leaves a truncated log rather than a holed
+    one. There are now tests that spy on `os.fsync`.
+  - **Manifest counts.** Including the footer in `counts` was also undetected:
+    the existing assertion checked `counts["tool"] == 1`, which stays true when
+    the footer is wrongly added.
+
+  All nine mutations are caught now. The tool is not part of `make check` or CI —
+  two minutes is right for an occasional audit and wrong for every push.
+
 ## [0.1.1] - 2026-09-17
 
 A correctness pass driven by measuring test coverage. Nothing here changes the

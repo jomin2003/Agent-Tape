@@ -184,6 +184,68 @@ def test_close_is_idempotent(tmp_path):
     assert first["digest"] == second["digest"]
 
 
+def test_append_fsyncs_before_returning(tmp_path, monkeypatch):
+    """The durability guarantee, asserted rather than merely documented.
+
+    The README and `docs/design.md` both say an event is on disk before the
+    caller receives its value, and that this is why a crash leaves a *truncated*
+    log rather than a *holed* one -- an effect that happened with no record of
+    it. Nothing tested it: deleting the fsync left the suite green.
+    """
+    calls = []
+    real_fsync = os.fsync
+
+    def spy(fd):
+        calls.append(fd)
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", spy)
+
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape, name="one")
+    assert calls, "append must fsync before it returns the event"
+    assert calls[-1] == tape._fh.fileno(), "it must fsync the event log"
+    tape.close()
+
+
+def test_every_append_fsyncs_not_just_the_first(tmp_path, monkeypatch):
+    count = {"n": 0}
+    real_fsync = os.fsync
+
+    def spy(fd):
+        count["n"] += 1
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", spy)
+
+    tape = Tape.create(tmp_path / "t.tape")
+    # create() fsyncs the manifest, so the tape exists on disk before any event
+    # references it. Count only the appends from here.
+    count["n"] = 0
+    for index in range(5):
+        append_event(tape, name="n{}".format(index))
+    assert count["n"] == 5
+    tape.close()
+
+
+def test_manifest_counts_exclude_the_footer(tmp_path):
+    """Counts describe agent work; the footer is bookkeeping.
+
+    A test asserted `counts["tool"] == 1`, which stayed true when the footer was
+    wrongly included, so the exclusion was never actually checked.
+    """
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape, name="one")
+    append_event(tape, name="two")
+
+    manifest = tape.close()
+    assert manifest["counts"] == {"tool": 2}
+    assert "footer" not in manifest["counts"]
+
+    # And it survives a round-trip through the manifest on disk.
+    assert Tape.describe(tmp_path / "t.tape")["counts"] == {"tool": 2}
+
+
 def test_unclosed_tape_recovers_its_tail_on_reopen(tmp_path):
     tape = Tape.create(tmp_path / "t.tape")
     append_event(tape, name="one")
