@@ -413,3 +413,229 @@ def test_fork_is_left_open_so_a_live_tail_can_be_appended(tmp_path):
     assert not fork.closed
     assert fork.writable
     fork.close()
+
+
+# --------------------------------------------------------------------------- #
+# Sequence protocol and the convenience readers
+# --------------------------------------------------------------------------- #
+
+
+def test_len_reports_the_event_count(tmp_path):
+    tape = Tape.create(tmp_path / "t.tape")
+    assert len(tape) == 0
+    for index in range(3):
+        append_event(tape, name="n{}".format(index))
+    assert len(tape) == 3
+    tape.close()
+
+
+def test_iterating_a_tape_yields_its_events(tmp_path):
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape, name="one")
+    append_event(tape, name="two")
+    tape.close()
+    names = [event.name for event in Tape.open(tmp_path / "t.tape")]
+    assert names[:2] == ["one", "two"]
+
+
+def test_events_reads_the_whole_tape_into_a_list(tmp_path):
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape, name="one")
+    tape.close()
+    events = Tape.open(tmp_path / "t.tape").events()
+    assert isinstance(events, list)
+    assert any(event.name == "one" for event in events)
+
+
+def test_read_is_an_alias_for_events(tmp_path):
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape, name="one")
+    tape.close()
+    handle = Tape.open(tmp_path / "t.tape")
+    assert [e.name for e in handle.read()] == [e.name for e in handle.events()]
+
+
+def test_reading_a_tape_with_no_event_log_yields_nothing(tmp_path):
+    tape = Tape.create(tmp_path / "t.tape")
+    tape.close()
+    os.remove(tmp_path / "t.tape" / EVENTS_NAME)
+    assert list(Tape.open(tmp_path / "t.tape").iter_events()) == []
+
+
+# --------------------------------------------------------------------------- #
+# Malformed tapes
+# --------------------------------------------------------------------------- #
+
+
+def test_a_manifest_that_is_not_json_is_rejected(tmp_path):
+    target = tmp_path / "t.tape"
+    target.mkdir()
+    (target / MANIFEST_NAME).write_text("{not json", encoding="utf-8")
+    with pytest.raises(TapeFormatError) as excinfo:
+        Tape.open(target)
+    assert "not valid JSON" in str(excinfo.value)
+
+
+def test_opening_a_path_that_does_not_exist_is_rejected(tmp_path):
+    with pytest.raises(TapeFormatError):
+        Tape.open(tmp_path / "never-created.tape")
+
+
+def test_describe_rejects_a_manifest_that_is_not_json(tmp_path):
+    target = tmp_path / "t.tape"
+    target.mkdir()
+    (target / MANIFEST_NAME).write_text("[]", encoding="utf-8")
+    with pytest.raises(TapeFormatError):
+        Tape.describe(target)
+
+
+def test_a_manifest_that_is_not_an_object_is_rejected(tmp_path):
+    target = tmp_path / "t.tape"
+    target.mkdir()
+    (target / MANIFEST_NAME).write_text("[1, 2, 3]", encoding="utf-8")
+    with pytest.raises(TapeFormatError):
+        Tape.open(target)
+
+
+def test_unknown_manifest_fields_are_preserved(tmp_path):
+    """A tape written by a newer library must still open."""
+    tape = Tape.create(tmp_path / "t.tape")
+    tape.close()
+    manifest_path = tmp_path / "t.tape" / MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["field_from_the_future"] = {"nested": True}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    reopened = Tape.open(tmp_path / "t.tape")
+    assert reopened.manifest["field_from_the_future"] == {"nested": True}
+
+
+# --------------------------------------------------------------------------- #
+# Lifecycle edges
+# --------------------------------------------------------------------------- #
+
+
+def test_appending_to_a_tape_that_was_closed_in_place_raises(tmp_path):
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape)
+    tape.close()
+    with pytest.raises(TapeError, match="closed"):
+        append_event(tape)
+
+
+def test_flushing_a_closed_tape_is_a_no_op(tmp_path):
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape)
+    tape.close()
+    tape.flush()  # must not raise
+
+
+def test_blank_lines_in_the_event_log_are_skipped(tmp_path):
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape, name="one")
+    append_event(tape, name="two")
+    tape.close()
+
+    events_path = tmp_path / "t.tape" / EVENTS_NAME
+    lines = events_path.read_text(encoding="utf-8").splitlines()
+    events_path.write_text("\n\n".join(lines) + "\n", encoding="utf-8")
+
+    names = [event.name for event in Tape.open(tmp_path / "t.tape").iter_events()]
+    assert names[:2] == ["one", "two"]
+
+
+def test_overwriting_a_directory_with_a_corrupt_manifest_is_refused(tmp_path):
+    """A damaged manifest must not be mistaken for permission to delete."""
+    target = tmp_path / "maybe-a-tape"
+    target.mkdir()
+    (target / MANIFEST_NAME).write_text("{not json", encoding="utf-8")
+    (target / "important.txt").write_text("keep me", encoding="utf-8")
+
+    with pytest.raises(TapeError):
+        Tape.create(target, overwrite=True)
+    assert (target / "important.txt").is_file()
+
+
+def test_overwriting_a_path_that_is_a_file_is_refused(tmp_path):
+    target = tmp_path / "a-file"
+    target.write_text("not a directory", encoding="utf-8")
+    with pytest.raises(TapeError):
+        Tape.create(target, overwrite=True)
+    assert target.is_file()
+
+
+def test_overwriting_a_symbolic_link_is_refused(tmp_path):
+    """An overwrite should not decide whether to follow a link."""
+    real = tmp_path / "real.tape"
+    Tape.create(real).close()
+    link = tmp_path / "link.tape"
+    try:
+        link.symlink_to(real, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("this platform does not allow creating symlinks unprivileged")
+
+    with pytest.raises(TapeError, match="symbolic link"):
+        Tape.create(link, overwrite=True)
+    assert link.is_symlink(), "the link must survive"
+    assert real.is_dir(), "the target must survive"
+
+
+def test_overwriting_an_empty_directory_removes_it(tmp_path):
+    target = tmp_path / "empty"
+    target.mkdir()
+    Tape.create(target, overwrite=True).close()
+    assert (target / MANIFEST_NAME).is_file()
+
+
+def test_overwriting_a_path_that_does_not_exist_just_creates_it(tmp_path):
+    target = tmp_path / "brand-new.tape"
+    Tape.create(target, overwrite=True).close()
+    assert (target / MANIFEST_NAME).is_file()
+
+
+def test_reopening_a_tape_with_no_event_log_starts_from_genesis(tmp_path):
+    """A tape whose event log vanished is reopened as an empty, unclosed tape."""
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape, name="one")
+    tape.flush()
+    tape._fh.close()
+    tape._fh = None
+    os.remove(tmp_path / "t.tape" / EVENTS_NAME)
+
+    reopened = Tape.open(tmp_path / "t.tape", writable=True)
+    assert reopened.digest == GENESIS
+    assert reopened.event_count == 0
+    reopened.close()
+
+
+def test_reopening_a_tape_with_a_truncated_tail_ignores_the_partial_line(tmp_path):
+    """A process killed mid-write leaves a partial final line, not a broken tape."""
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape, name="one")
+    append_event(tape, name="two")
+    head = tape.digest
+    tape.flush()
+    tape._fh.close()
+    tape._fh = None
+
+    with open(tmp_path / "t.tape" / EVENTS_NAME, "a", encoding="utf-8") as handle:
+        handle.write('{"seq": 2, "kind": "tool", "name": "thr')  # killed here
+
+    reopened = Tape.open(tmp_path / "t.tape", writable=True)
+    assert reopened.digest == head
+    assert reopened.event_count == 2
+    reopened.close()
+
+
+def test_reopening_a_tape_whose_event_log_is_empty_starts_from_genesis(tmp_path):
+    tape = Tape.create(tmp_path / "t.tape")
+    append_event(tape, name="one")
+    tape.flush()
+    tape._fh.close()
+    tape._fh = None
+    (tmp_path / "t.tape" / EVENTS_NAME).write_text("", encoding="utf-8")
+
+    reopened = Tape.open(tmp_path / "t.tape", writable=True)
+    assert reopened.digest == GENESIS
+    assert reopened.event_count == 0
+    reopened.close()

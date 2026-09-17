@@ -51,7 +51,7 @@ import sys
 import time
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, TextIO, Union
+from typing import Any, Dict, Iterator, List, Optional, TextIO, Tuple, Union
 
 from ._version import TAPE_FORMAT_VERSION, __version__
 from .canonical import (
@@ -179,29 +179,7 @@ class Tape:
             TapeFormatError: If *path* is not a tape, or its format version is
                 newer than this library understands.
         """
-        target = Path(path)
-        manifest_path = target / MANIFEST_NAME
-        if not manifest_path.is_file():
-            raise TapeFormatError(
-                "{} is not an agenttape: no {} found".format(target, MANIFEST_NAME)
-            )
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except ValueError as exc:
-            raise TapeFormatError("{} is not valid JSON: {}".format(manifest_path, exc)) from exc
-
-        if manifest.get("format") != FORMAT_NAME:
-            raise TapeFormatError(
-                "{} declares format {!r}, expected {!r}".format(
-                    manifest_path, manifest.get("format"), FORMAT_NAME
-                )
-            )
-        version = int(manifest.get("format_version") or 0)
-        if version > TAPE_FORMAT_VERSION:
-            raise TapeFormatError(
-                "tape format version {} is newer than this library supports "
-                "({}). Upgrade agenttape.".format(version, TAPE_FORMAT_VERSION)
-            )
+        target, manifest = cls._read_manifest(path)
 
         tape = cls(target, manifest, writable=writable)
         if writable:
@@ -228,11 +206,51 @@ class Tape:
         This is the O(1)-memory way to answer "what is this tape?" -- useful for
         listing thousands of runs.
         """
+        _target, manifest = Tape._read_manifest(path)
+        return manifest
+
+    @staticmethod
+    def _read_manifest(path: PathLike) -> Tuple[Path, Dict[str, Any]]:
+        """Load and validate a tape's manifest, returning ``(path, manifest)``.
+
+        Shared by :meth:`open` and :meth:`describe` so that both reject the same
+        malformed files with the same errors. They used to differ: ``describe``
+        returned whatever ``json.loads`` produced -- including a bare list -- and
+        ``open`` then died on it with an ``AttributeError`` from ``.get``.
+        """
         target = Path(path)
         manifest_path = target / MANIFEST_NAME
         if not manifest_path.is_file():
-            raise TapeFormatError("{} is not an agenttape".format(target))
-        return json.loads(manifest_path.read_text(encoding="utf-8"))
+            raise TapeFormatError(
+                "{} is not an agenttape: no {} found".format(target, MANIFEST_NAME)
+            )
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            raise TapeFormatError("{} is not valid JSON: {}".format(manifest_path, exc)) from exc
+
+        # Valid JSON is not enough: it has to be an object. A bare list or scalar
+        # here means the wrong file, or a damaged one, and should say so.
+        if not isinstance(manifest, dict):
+            raise TapeFormatError(
+                "{} does not contain a JSON object (found {})".format(
+                    manifest_path, type(manifest).__name__
+                )
+            )
+
+        if manifest.get("format") != FORMAT_NAME:
+            raise TapeFormatError(
+                "{} declares format {!r}, expected {!r}".format(
+                    manifest_path, manifest.get("format"), FORMAT_NAME
+                )
+            )
+        version = int(manifest.get("format_version") or 0)
+        if version > TAPE_FORMAT_VERSION:
+            raise TapeFormatError(
+                "tape format version {} is newer than this library supports "
+                "({}). Upgrade agenttape.".format(version, TAPE_FORMAT_VERSION)
+            )
+        return target, manifest
 
     # -- fork --------------------------------------------------------------- #
 
@@ -422,10 +440,10 @@ class Tape:
 
     def _write_stored(self, stored: Dict[str, Any]) -> None:
         handle = self._fh
-        if handle is None:
+        if handle is None:  # pragma: no cover - defensive
             # Unreachable via append()/_append_verbatim(), both of which call
-            # _require_writable() first. Kept explicit so the failure is a clear
-            # message rather than an AttributeError on None.
+            # _require_writable() first. Kept explicit so the failure would be a
+            # clear message rather than an AttributeError on None.
             raise TapeError("no open event log for {}".format(self._path))
         line = canonical_dumps(stored)
         handle.write(line + "\n")
@@ -675,14 +693,26 @@ class Tape:
     def _safe_remove(target: Path) -> None:
         """Remove *target* only if it is empty or recognisably an agenttape.
 
-        A guard rail: ``overwrite=True`` must never be able to delete a
-        directory of the user's actual work.
+        A guard rail: ``overwrite=True`` must never be able to destroy anything
+        that is not a tape. It used to unlink any file or symlink it found, so a
+        path that pointed at a file rather than a directory -- a typo, or a
+        misread argument -- was deleted without a word.
         """
-        if target.is_file() or target.is_symlink():
-            target.unlink()
-            return
+
+        def refuse(reason: str) -> TapeError:
+            return TapeError(
+                "refusing to overwrite {}: {}. Remove it yourself if that is "
+                "really what you want.".format(target, reason)
+            )
+
+        if target.is_symlink():
+            raise refuse(
+                "it is a symbolic link, and an overwrite should not decide whether to follow it"
+            )
+        if target.is_file():
+            raise refuse("it is a file, not a tape directory")
         if not target.is_dir():
-            return
+            return  # nothing there yet; create() will make the directory
         entries = list(target.iterdir())
         if not entries:
             target.rmdir()
@@ -697,10 +727,7 @@ class Tape:
             except ValueError:
                 looks_like_tape = False
         if not looks_like_tape:
-            raise TapeError(
-                "refusing to overwrite {}: it is not an agenttape directory. "
-                "Remove it yourself if that is really what you want.".format(target)
-            )
+            raise refuse("it is not an agenttape directory")
         shutil.rmtree(target)
 
 

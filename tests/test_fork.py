@@ -123,6 +123,40 @@ def test_a_forked_session_is_never_reported_as_verified(short_tape, tmp_path):
         assert session.verified is False
 
 
+def test_the_fork_manifest_is_labelled_counterfactual(short_tape, tmp_path):
+    """A forked session is not a plain recording, and its manifest says so.
+
+    Going live flips the session's mode to "record", so the label has to be set
+    in the recording branch of close(). It used to be set in the replay branch,
+    which a forked session never reaches -- so the label was never written at
+    all and every counterfactual tape claimed to be an ordinary recording.
+    """
+    fork = str(tmp_path / "fork.tape")
+    with at.replay(short_tape, on_exhausted="live", fork_to=fork) as session:
+        session.tool("step", [1])
+        session.tool("step", [2])
+        session.tool("step", [3], fn=lambda: "three")
+        summary = session.close()
+
+    assert summary["mode"] == "counterfactual"
+    assert summary["forked_at"] == 2
+
+    # And it survives into the footer that a reader would inspect.
+    footer = next(
+        event for event in at.Tape.open(fork).iter_events() if event.kind == at.EventKind.FOOTER
+    )
+    assert footer.response["mode"] == "counterfactual"
+    assert footer.response["forked_at"] == 2
+
+
+def test_an_ordinary_recording_is_not_labelled_counterfactual(tape_path):
+    with at.record(tape_path) as session:
+        session.tool("t", [1], response="v")
+        summary = session.close()
+    assert summary["mode"] == "record"
+    assert "forked_at" not in summary
+
+
 def test_diff_between_a_recording_and_its_counterfactual(tmp_path):
     """The counterfactual differs from the original exactly where it branched."""
     original = str(tmp_path / "original.tape")

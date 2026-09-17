@@ -18,7 +18,15 @@ from dataclasses import dataclass
 import pytest
 
 import agenttape as at
-from agenttape import canonical_dumps, canonical_loads, fingerprint, from_canonical, to_canonical
+from agenttape import (
+    TAG,
+    canonical_dumps,
+    canonical_loads,
+    fingerprint,
+    from_canonical,
+    to_canonical,
+)
+from agenttape.canonical import is_blob_ref
 from agenttape.errors import CanonicalizationError
 
 # --------------------------------------------------------------------------- #
@@ -43,8 +51,23 @@ def test_set_order_does_not_matter():
     assert first == second
 
 
-def test_frozenset_matches_set_encoding():
-    assert canonical_dumps(frozenset({"a", "b"})) == canonical_dumps({"a", "b"})
+def test_frozenset_is_distinct_from_set():
+    """They are equal in value but must not be conflated.
+
+    Replay hands decoded responses back to the agent, so a recorded frozenset
+    that came back as a set would break any code using it as a dict key or a set
+    member. The tags therefore differ.
+    """
+    assert to_canonical(frozenset({"a"}))[TAG] == "frozenset"
+    assert to_canonical({"a"})[TAG] == "set"
+    assert canonical_dumps({"a"}) != canonical_dumps(frozenset({"a"}))
+
+
+def test_set_and_frozenset_are_both_order_independent():
+    assert canonical_dumps({"a", "b", "c"}) == canonical_dumps({"c", "b", "a"})
+    assert canonical_dumps(frozenset({"a", "b", "c"})) == canonical_dumps(
+        frozenset({"c", "b", "a"})
+    )
 
 
 def test_output_has_no_insignificant_whitespace():
@@ -227,3 +250,134 @@ def test_fingerprint_detects_a_change_in_a_nested_value():
 def test_short_hash_truncates():
     assert at.short_hash("abcdef123456", 6) == "abcdef"
     assert at.short_hash("") == ""
+
+
+# --------------------------------------------------------------------------- #
+# Reversal, tag by tag
+# --------------------------------------------------------------------------- #
+#
+# The module docstring promises an exact inverse for some tags and a plain-data
+# decoding for others. Both halves of that promise are pinned here, so the
+# documentation cannot drift away from the behaviour.
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        b"\x00\xff\x10hello",
+        dt.datetime(2026, 4, 12, 9, 30, tzinfo=dt.timezone(dt.timedelta(hours=5, minutes=30))),
+        dt.date(2026, 4, 12),
+        dt.time(9, 30, 15),
+        dt.timedelta(seconds=90, microseconds=5),
+        uuid.UUID("12345678-1234-5678-1234-567812345678"),
+        float("inf"),
+        float("-inf"),
+        {1, 2, 3},
+        frozenset({"a", "b"}),
+        "plain string",
+        123,
+        1.5,
+        None,
+        True,
+        [1, {"nested": {2, 3}}],
+    ],
+    ids=lambda value: type(value).__name__,
+)
+def test_exactly_invertible_tags_round_trip(value):
+    """These tags decode back to an equal value of the same type."""
+    decoded = from_canonical(to_canonical(value))
+    assert decoded == value
+    assert type(decoded) is type(value)
+
+
+def test_nan_round_trips_as_nan():
+    decoded = from_canonical(to_canonical(float("nan")))
+    import math
+
+    assert math.isnan(decoded)
+
+
+def test_dataclass_decodes_to_plain_data_not_an_instance():
+    """Rebuilding the class would mean importing a name the tape supplies."""
+
+    @dataclass
+    class Point:
+        x: int
+        y: int
+
+    decoded = from_canonical(to_canonical(Point(1, 2)))
+    assert not isinstance(decoded, Point), "the tape must not be able to instantiate classes"
+    assert decoded[TAG] == "dataclass"
+    assert decoded["value"] == {"x": 1, "y": 2}
+    assert decoded["type"].endswith("Point")
+
+
+def test_exception_decodes_to_its_error_record():
+    decoded = from_canonical(to_canonical(ValueError("boom")))
+    assert decoded[TAG] == "exception"
+    assert decoded["value"]["type"] == "ValueError"
+    assert decoded["value"]["message"] == "boom"
+    assert decoded["value"]["module"] == "builtins"
+
+
+def test_opaque_decodes_to_the_tagged_dict():
+    class Opaque:
+        pass
+
+    decoded = from_canonical(to_canonical(Opaque(), strict=False))
+    assert decoded[TAG] == "opaque"
+
+
+def test_an_unknown_tag_is_decoded_recursively_rather_than_failing():
+    """A reader written against an older format must degrade, not raise."""
+    payload = {TAG: "something-from-the-future", "value": {"nested": [1, 2]}}
+    decoded = from_canonical(payload)
+    assert decoded == payload
+
+
+def test_sets_of_composite_values_round_trip():
+    """Set elements must be frozen before they can go back into a set."""
+    value = {(1, 2), (3, 4)}
+    assert from_canonical(to_canonical(value)) == value
+
+
+def test_set_of_dicts_round_trips_via_freezing():
+    value = {"alpha", "beta", "gamma"}
+    decoded = from_canonical(to_canonical(value))
+    assert decoded == value
+
+
+def test_a_frozen_dataclass_inside_a_set_round_trips():
+    """Set members are frozen, so a tagged member decodes to a hashable value.
+
+    This is the path that exercises the dict branch of the freezing helper: a
+    frozen dataclass is hashable, so it can live in a set, and it decodes to a
+    tagged mapping that has to become hashable again before it can go back in.
+    """
+
+    @dataclass(frozen=True)
+    class Point:
+        x: int
+        y: int
+
+    decoded = from_canonical(to_canonical({Point(1, 2)}))
+    assert len(decoded) == 1
+    member = next(iter(decoded))
+    assert isinstance(member, tuple), "a tagged mapping must be frozen to stay hashable"
+    assert ("value", (("x", 1), ("y", 2))) in member
+
+
+def test_is_blob_ref_recognises_only_blob_tags():
+    assert is_blob_ref({TAG: "blob", "value": "abc", "size": 3})
+    assert not is_blob_ref({TAG: "bytes", "value": "6162"})
+    assert not is_blob_ref({"value": "abc"})
+    assert not is_blob_ref("not a dict")
+    assert not is_blob_ref(None)
+
+
+def test_blob_reference_resolution_is_recursive():
+    """A blob nested inside a structure must still be resolved."""
+    inner = canonical_dumps({"deep": {"payload": [1, 2, 3]}}).encode("utf-8")
+    stored = {"outer": [{TAG: "blob", "value": "ref", "size": len(inner)}]}
+    decoded = from_canonical(stored, blobs=lambda ref: inner)
+    assert decoded == {"outer": [{"deep": {"payload": [1, 2, 3]}}]}

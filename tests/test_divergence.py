@@ -79,6 +79,55 @@ def test_using_a_different_boundary_kind_is_detected(simple_tape):
             session.model("search", {"args": ["alpha"], "kwargs": {}}, fn=lambda: "x")
 
 
+def test_a_key_that_disagrees_with_its_request_is_reported_clearly(tmp_path):
+    """A tape whose stored key does not match its stored request.
+
+    Hand-written tapes and other implementations can produce this. The request
+    payloads then diff as identical, which is confusing unless the message says
+    why -- so the diff falls back to naming the key as the difference.
+    """
+    from agenttape import EventKind
+
+    path = str(tmp_path / "odd.tape")
+    # Exactly what session.tool("search", ["alpha"]) builds, so the two payloads
+    # really are identical and the only thing that can differ is the key.
+    request = {"args": ["alpha"], "kwargs": {}}
+    with at.Tape.create(path) as tape:
+        tape.append(
+            kind=EventKind.TOOL,
+            name="search",
+            key="deliberately-not-the-fingerprint-of-the-request",
+            request=request,
+            response="hits",
+        )
+
+    with pytest.raises(RequestMismatchError) as excinfo:
+        with at.replay(path) as session:
+            session.tool("search", ["alpha"], fn=lambda: "hits")
+
+    assert "structurally identical" in excinfo.value.detail
+    assert "key" in excinfo.value.detail
+
+
+def test_a_large_diff_is_truncated(tmp_path):
+    """A divergence on a huge payload must not print the whole thing."""
+    path = str(tmp_path / "big.tape")
+    big = {"field_{:03d}".format(i): "value-{}".format(i) for i in range(200)}
+    # Change enough fields that the unified diff runs past the 40-line cap.
+    changed = dict(big)
+    for i in range(60):
+        changed["field_{:03d}".format(i)] = "CHANGED"
+
+    with at.record(path) as session:
+        session.tool("search", [big], fn=lambda: "hits")
+
+    with pytest.raises(RequestMismatchError) as excinfo:
+        with at.replay(path) as session:
+            session.tool("search", [changed], fn=lambda: "hits")
+
+    assert "diff truncated" in excinfo.value.detail
+
+
 # --------------------------------------------------------------------------- #
 # Run length
 # --------------------------------------------------------------------------- #

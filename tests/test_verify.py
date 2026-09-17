@@ -336,3 +336,146 @@ def test_determinism_check_replays_the_clock_and_rng(tmp_path):
         agent(session)
 
     assert at.check_determinism(path, agent, repeats=3).deterministic
+
+
+def test_determinism_check_reports_a_non_divergence_tape_error(tmp_path):
+    """A broken tape is reported as a problem, not propagated as an exception."""
+    path = str(tmp_path / "broken.tape")
+
+    def agent(session):
+        session.tool("a", [1], fn=lambda: "one")
+
+    with at.record(path) as session:
+        agent(session)
+
+    # Corrupt the log in the middle so reading it raises TapeIntegrityError.
+    events = Path(path) / EVENTS_NAME
+    lines = events.read_text(encoding="utf-8").splitlines()
+    lines.insert(1, "{not json")
+    events.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    report = at.check_determinism(path, agent, repeats=2)
+    assert not report.deterministic
+    assert any("integrity" in problem.lower() for problem in report.problems)
+
+
+# --------------------------------------------------------------------------- #
+# verify: damaged logs and rendered output
+# --------------------------------------------------------------------------- #
+
+
+def test_verify_reports_a_corrupt_log_line_rather_than_raising(tape):
+    events = Path(tape) / EVENTS_NAME
+    lines = events.read_text(encoding="utf-8").splitlines()
+    lines.insert(1, "{not json at all")
+    events.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    report = at.verify(tape)
+    assert not report.ok
+    assert not report.chain_ok
+    assert report.problems
+
+
+def test_report_render_lists_each_problem(tape):
+    events = Path(tape) / EVENTS_NAME
+    lines = events.read_text(encoding="utf-8").splitlines()
+    lines[1] = lines[1].replace("hits", "tampered")
+    events.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    rendered = at.verify(tape).render()
+    assert "FAILED" in rendered
+    assert "  ! " in rendered, "each problem should be listed with a ! marker"
+
+
+def test_report_render_omits_the_kinds_line_when_there_are_no_events(tmp_path):
+    """A tape containing only a footer has no agent work to count.
+
+    Built with ``Tape.create`` rather than ``Session.record``: the latter writes
+    a header event, which counts.
+    """
+    path = str(tmp_path / "empty.tape")
+    at.Tape.create(path).close()
+
+    report = at.verify(path)
+    assert report.ok
+    assert report.counts == {}
+    assert "kinds" not in report.render()
+
+
+def test_diff_render_for_identical_tapes(tmp_path):
+    first = str(tmp_path / "a.tape")
+    with at.record(first) as session:
+        session.tool("a", [1], fn=lambda: "one")
+    second = str(tmp_path / "b.tape")
+    at.Tape.fork(first, second).close()
+
+    result = at.diff(first, second)
+    assert result.identical
+    rendered = result.render()
+    assert "equivalent" in rendered
+    assert "1 events compared" in rendered or "events compared" in rendered
+
+
+def test_diff_render_includes_the_detail_for_a_real_difference(tmp_path):
+    first = str(tmp_path / "a.tape")
+    with at.record(first) as session:
+        session.tool("a", [1], fn=lambda: "one")
+    second = str(tmp_path / "b.tape")
+    with at.record(second) as session:
+        session.tool("a", [2], fn=lambda: "two")
+
+    rendered = at.diff(first, second).render()
+    assert "different call" in rendered
+    assert "recorded" in rendered and "replayed" in rendered
+
+
+def test_report_render_shows_where_a_tape_was_forked_from(tmp_path):
+    source = str(tmp_path / "source.tape")
+    with at.record(source) as session:
+        session.tool("a", [1], fn=lambda: "one")
+        session.tool("b", [2], fn=lambda: "two")
+    fork = str(tmp_path / "fork.tape")
+    at.Tape.fork(source, fork, upto_seq=0).close()
+
+    rendered = at.verify(fork).render()
+    assert "forked from" in rendered
+    assert "seq 0" in rendered
+
+
+def test_determinism_report_render_lists_problems(tmp_path):
+    path = str(tmp_path / "leaky.tape")
+
+    def leaky(session):
+        session.outcome({"roll": random.random()})
+
+    with at.record(path) as session:
+        leaky(session)
+
+    report = at.check_determinism(path, leaky, repeats=3)
+    assert not report.deterministic
+    rendered = report.render()
+    assert "NOT REPRODUCIBLE" in rendered
+    assert "  ! " in rendered
+
+
+def test_determinism_check_reports_a_tape_error_from_close(tmp_path):
+    """A tape that fails while being drained is reported, not propagated.
+
+    The agent consumes only the first event, so the second is pulled by the
+    completion check inside ``close()`` -- which is where the damaged blob is
+    discovered. That is the ``AgentTapeError`` path, distinct from a divergence.
+    """
+    path = str(tmp_path / "half-broken.tape")
+    with at.record(path, blob_threshold=128) as session:
+        session.tool("a", [1], fn=lambda: "small")
+        session.tool("b", [2], fn=lambda: "x" * 4000)
+
+    for blob in (Path(path) / BLOBS_DIR).iterdir():
+        blob.unlink()
+
+    def consumes_only_the_first_event(session):
+        session.tool("a", [1])
+
+    report = at.check_determinism(path, consumes_only_the_first_event, repeats=2)
+    assert not report.deterministic
+    assert any("blob" in problem and "missing" in problem for problem in report.problems)

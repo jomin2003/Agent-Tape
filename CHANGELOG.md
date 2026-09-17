@@ -12,6 +12,73 @@ wrote them, so format breaks are treated as a last resort.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-17
+
+A correctness pass driven by measuring test coverage. Nothing here changes the
+tape layout, so `format_version` stays at 1.
+
+### Fixed
+
+- **`Tape.create(path, overwrite=True)` deleted a plain file without a word.**
+  The overwrite guard was written to refuse anything that is not a tape, and its
+  docstring said so, but its first branch unlinked *any* file or symlink it
+  found. A path that pointed at a file rather than a directory — a typo, or a
+  misread argument — was destroyed and replaced by a tape directory. Files and
+  symbolic links are now refused with an explanation, like non-tape directories
+  already were.
+- **A recorded `frozenset` replayed as a `set`.** Both used the same tag, so the
+  distinction was lost at encode time. Replay hands decoded responses back to the
+  agent, so a value that came back as a `set` would break any code using it as a
+  dict key or a set member. They now have distinct tags, which means
+  `canonical_dumps(set)` and `canonical_dumps(frozenset)` are no longer equal —
+  a stricter, and more correct, comparison.
+- **`exception` decoded differently from `dataclass`.** The `dataclass` tag was
+  preserved through decoding; the `exception` tag was unwrapped to its bare error
+  record, losing the fact that the value had been an exception. Both now keep
+  their tag.
+- **Counterfactual tapes were labelled as ordinary recordings.** `Session.close`
+  set the `"mode": "counterfactual"` summary inside its *replay* branch, but
+  going live flips the session's mode to `"record"`, so a forked session never
+  reached it. The label was never written at all, and the block was unreachable
+  dead code. It now lives in the branch that actually runs.
+- **`Tape.describe` did not validate the manifest.** It returned whatever
+  `json.loads` produced, so a manifest containing `[]` made `Tape.open` fail with
+  `AttributeError: 'list' object has no attribute 'get'` instead of a clear
+  format error. Both now share one validated reader.
+- The `canonical` module docstring claimed the encoding was "a genuine
+  round-trip for every type the encoder understands". That was untrue for
+  `dataclass` and `exception`, which decode to plain data rather than to the
+  original object — deliberately, since rebuilding them would mean importing a
+  class named by the tape. The docstring now says which tags invert exactly and
+  which do not.
+
+### Removed
+
+- `channel.describe_request`. It was never called, never exported, and had no
+  tests: dead code with a plausible-looking docstring.
+
+### Added
+
+- 68 tests, taking the suite from 276 to 344, and coverage from 94% to 99%.
+  They cover the canonical round-trip for every tag, `Tape`'s sequence protocol
+  and convenience readers, malformed and truncated tapes, damaged blob stores,
+  the full inherited `random.Random` surface, and the divergence-reporting paths
+  that only fire on unusual input.
+- A coverage floor of 95% in `pyproject.toml`, enforced by a CI job. A floor
+  rather than a target: it catches a new module or branch arriving with no tests,
+  not a defensive guard going unexercised. Guards that genuinely cannot be
+  reached are marked `# pragma: no cover` with a comment saying why.
+
+### Changed
+
+- `README.md` no longer tells you to `pip install agenttape`. The package is not
+  on PyPI, so anyone following it got a 404. It installs from the tag, with the
+  checkout route for development. `CONTRIBUTING.md` said `cd agenttape` where the
+  repository is `Agent-Tape`, which failed on the second line of the clone
+  sequence.
+- `docs/index.md` was orphaned — nothing linked to it. The README now has a
+  Documentation table covering every doc.
+
 ## [0.1.0] - 2026-09-17
 
 First public release.
@@ -108,5 +175,6 @@ first push, before this version had been published anywhere. They are part of
 - Resolved all `mypy` findings, including a shadowed parameter name in
   `check_determinism` and untyped `Tape._fh`.
 
-[Unreleased]: https://github.com/jomin2003/Agent-Tape/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jomin2003/Agent-Tape/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/jomin2003/Agent-Tape/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jomin2003/Agent-Tape/releases/tag/v0.1.0

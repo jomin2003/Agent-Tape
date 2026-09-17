@@ -13,13 +13,22 @@ The rules:
 * ``float`` uses Python's shortest round-tripping ``repr``; NaN and infinities
   are encoded symbolically because JSON has no representation for them.
 * Non-JSON-native types are tagged with a single reserved key,
-  :data:`TAG`, so that the encoding is self-describing and reversible.
+  :data:`TAG`, so that the encoding is self-describing.
 * Anything else raises :class:`~agenttape.errors.CanonicalizationError` in
   strict mode rather than falling back to ``repr()``, which for a default object
   contains its memory address and would make fingerprints non-reproducible.
 
-Reversal is provided by :func:`from_canonical`, which makes the encoding a
-genuine round-trip for every type the encoder understands.
+:func:`from_canonical` reverses the encoding, but it is an exact inverse for
+only some of the tags:
+
+* **Exactly inverted**: ``bytes``, ``datetime``, ``date``, ``time``,
+  ``timedelta``, ``uuid``, non-finite ``float``, ``set`` and ``frozenset``.* **Decoded to plain data**: ``dataclass`` becomes ``{TAG, "type", "value"}`` --
+  the field values, with the class *named* but never instantiated -- and
+  ``exception`` becomes the portable error record. Reconstructing either would
+  mean importing a class named by the tape, and a tape must be readable without
+  importing anything it names.
+* **Passed through**: ``opaque`` and unknown tags, so that a reader written
+  against an older format degrades to raw data instead of failing.
 """
 
 from __future__ import annotations
@@ -151,7 +160,11 @@ def to_canonical(value: Any, *, strict: bool = True, _depth: int = 0) -> Any:
         # Python's per-process string hashing.
         items = [to_canonical(v, strict=strict, _depth=_depth + 1) for v in value]
         items.sort(key=canonical_dumps)
-        return {TAG: "set", "value": items}
+        # set and frozenset get distinct tags. They are equal in value but not
+        # interchangeable: replay hands decoded responses back to the agent, and
+        # a frozenset that came back as a set would break any code using it as a
+        # dict key or a set member.
+        return {TAG: "frozenset" if isinstance(value, frozenset) else "set", "value": items}
 
     encoder = getattr(value, ENCODER_ATTR, None)
     if callable(encoder):
@@ -205,6 +218,11 @@ def _exception_record(exc: BaseException) -> dict:
 def from_canonical(value: Any, *, blobs: Optional[BlobResolver] = None) -> Any:
     """Reverse :func:`to_canonical`.
 
+    An exact inverse for scalars, ``bytes``, the date/time family, ``uuid``,
+    non-finite floats and sets. ``dataclass`` and ``exception`` decode to
+    plain-data forms rather than to the original object, because rebuilding them
+    would mean importing a class named by the tape; see the module docstring.
+
     Args:
         value: A canonical structure produced by :func:`to_canonical` (or by
             ``json.loads`` of its textual form).
@@ -242,8 +260,9 @@ def from_canonical(value: Any, *, blobs: Optional[BlobResolver] = None) -> Any:
         if raw == "nan":
             return float("nan")
         return float("inf") if raw == "inf" else float("-inf")
-    if tag == "set":
-        return {_freeze(v) for v in (from_canonical(i, blobs=blobs) for i in value["value"])}
+    if tag in ("set", "frozenset"):
+        items = {_freeze(v) for v in (from_canonical(i, blobs=blobs) for i in value["value"])}
+        return frozenset(items) if tag == "frozenset" else items
     if tag == "dataclass":
         return {
             TAG: "dataclass",
@@ -251,7 +270,12 @@ def from_canonical(value: Any, *, blobs: Optional[BlobResolver] = None) -> Any:
             "value": {k: from_canonical(v, blobs=blobs) for k, v in value["value"].items()},
         }
     if tag == "exception":
-        return dict(value["value"])
+        # Kept wrapped, exactly like `dataclass` above, rather than unwrapped to
+        # the bare error record. Unwrapping would lose the fact that this value
+        # *was* an exception -- a plain dict could otherwise be mistaken for one
+        # -- and would make the two structured tags behave differently for no
+        # reason a reader could predict.
+        return {TAG: "exception", "value": dict(value["value"])}
     if tag == "opaque":
         return value
     if tag == "blob":

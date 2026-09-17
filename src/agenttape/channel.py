@@ -33,7 +33,7 @@ import json
 import time
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional
 
-from .canonical import canonical_dumps, to_canonical
+from .canonical import to_canonical
 from .errors import (
     RequestMismatchError,
     SessionStateError,
@@ -478,11 +478,3 @@ def request_diff(recorded: Any, observed: Any, *, context: int = 1) -> str:
     if len(lines) > 40:
         lines = [*lines[:40], "  ... (diff truncated)"]
     return "\n".join("  " + line for line in lines)
-
-
-def describe_request(value: Any, limit: int = 160) -> str:
-    """Compact one-line rendering of a request payload, for logs."""
-    text = canonical_dumps(value, strict=False)
-    if len(text) > limit:
-        return text[: limit - 3] + "..."
-    return text

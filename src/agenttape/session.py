@@ -320,8 +320,14 @@ class Session:
     # than an AttributeError on None.
 
     def _require_recorder(self) -> Recorder:
-        """The active recorder, or raise if this session is replaying."""
-        if self._recorder is None:
+        """The active recorder, or raise if this session is replaying.
+
+        The raise is unreachable: ``_mode`` and a live recorder are set and
+        cleared together. It exists so that a future refactor which breaks that
+        pairing produces a diagnosable message instead of an ``AttributeError``
+        on ``None``.
+        """
+        if self._recorder is None:  # pragma: no cover - defensive
             raise SessionStateError(
                 "this session has no recorder: it was opened with "
                 "Session.replay() and has not gone live"
@@ -329,8 +335,11 @@ class Session:
         return self._recorder
 
     def _require_replayer(self) -> Replayer:
-        """The active replayer, or raise if this session is recording."""
-        if self._replayer is None:
+        """The active replayer, or raise if this session is recording.
+
+        Unreachable for the same reason as :meth:`_require_recorder`.
+        """
+        if self._replayer is None:  # pragma: no cover - defensive
             raise SessionStateError(
                 "this session has no replayer: it was opened with Session.record()"
             )
@@ -873,10 +882,18 @@ class Session:
         if self._closed:
             return self._summary or {}
 
+        # Annotated because the two branches below build different shapes, and
+        # without this the inferred type of the first one constrains the second.
+        summary: Dict[str, Any]
+
         if self._mode == "record":
             recorder = self._require_recorder()
             summary = {
-                "mode": "record",
+                # A session that went live after its recording ran out is not a
+                # plain recording. Labelling it here is the only place that can
+                # happen: going live flips _mode to "record", so the replay
+                # branch below is never reached for a forked session.
+                "mode": "counterfactual" if self.forked else "record",
                 "tape": str(self._tape.path),
                 "events": self._tape.event_count,
                 "counts": dict(recorder.counts),
@@ -888,6 +905,8 @@ class Session:
                 "duration_seconds": round(recorder.total_duration, 6),
                 "seed": self._seed,
             }
+            if self.forked:
+                summary["forked_at"] = self.fork_seq
             self._tape.close(summary=summary)
             summary["digest"] = self._tape.digest
         else:
@@ -909,14 +928,6 @@ class Session:
                 "verified": self.verified and not self.forked,
                 "digest": self._tape.digest,
             }
-            if self.forked:
-                self._tape.close(
-                    summary={
-                        "mode": "counterfactual",
-                        "forked_at": self.fork_seq,
-                        "counts": dict(self._recorder.counts) if self._recorder else {},
-                    }
-                )
             # Release the event stream's file handle. On Windows a live handle
             # blocks the tape directory from being moved or deleted.
             replayer.close()

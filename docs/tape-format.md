@@ -194,7 +194,8 @@ Every value on a tape is encoded by `agenttape.canonical`. The rules:
 | `timedelta` | `{"__agenttape__": "timedelta", "value": <seconds>}` |
 | `uuid` | `{"__agenttape__": "uuid", "value": "<canonical-uuid>"}` |
 | `float` | `{"__agenttape__": "float", "value": "nan" \| "inf" \| "-inf"}` |
-| `set` / `frozenset` | `{"__agenttape__": "set", "value": [<elements, sorted by their own canonical encoding>]}` |
+| `set` | `{"__agenttape__": "set", "value": [<elements, sorted by their own canonical encoding>]}` |
+| `frozenset` | As `set`, with the tag `"frozenset"` |
 | `dataclass` | `{"__agenttape__": "dataclass", "type": "<module>.<qualname>", "value": {...}}` |
 | `exception` | `{"__agenttape__": "exception", "value": <error record>}` |
 | `blob` | `{"__agenttape__": "blob", "value": "<sha256>", "size": <bytes>}` |
@@ -202,6 +203,25 @@ Every value on a tape is encoded by `agenttape.canonical`. The rules:
 
 Non-string object keys are prefixed with `"\x00"` and encoded canonically, so
 `{1: "a"}` and `{"1": "a"}` cannot collide.
+
+`set` and `frozenset` get **distinct tags** even though they compare equal. Replay
+hands decoded responses back to the agent, so a recorded `frozenset` that came
+back as a `set` would break any code using it as a dict key or a set member.
+Readers must not treat the two as interchangeable.
+
+### Decoding
+
+A reader reverses the encoding with `from_canonical`. It is an exact inverse for
+the scalar tags, `bytes`, the date/time family, `uuid` and both set tags.
+
+`dataclass` and `exception` decode to a **plain-data form** rather than to the
+original object: reconstructing either would mean importing a class named by the
+tape, and a tape must be readable without importing anything it names. Both keep
+their tag, so a reader can always tell what the value originally was.
+
+`opaque` and any unrecognised tag are passed through with their contents decoded
+recursively, so a reader written against an older format degrades to raw data
+instead of failing.
 
 ---
 

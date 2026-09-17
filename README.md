@@ -10,7 +10,7 @@ Record AI agent runs to local files. Replay them offline, deterministically.
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-276-brightgreen.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-344-brightgreen.svg)](tests)
 
 Pure Python · zero runtime dependencies · library only
 
@@ -143,7 +143,7 @@ Stated up front, because it matters:
 **Not on PyPI yet.** Install straight from the repository:
 
 ```bash
-pip install "agenttape @ git+https://github.com/jomin2003/Agent-Tape@v0.1.0"
+pip install "agenttape @ git+https://github.com/jomin2003/Agent-Tape@v0.1.1"
 ```
 
 Or from a checkout, for development:
@@ -505,7 +505,7 @@ Full reference: [`docs/api.md`](docs/api.md).
 ## Testing
 
 ```bash
-pytest                       # 276 tests, a few seconds, no network
+pytest                       # 344 tests, a few seconds, no network
 pytest --cov=agenttape
 ```
 
@@ -518,7 +518,7 @@ constraints (no dependencies, no CLI).
 
 ## Status and scope
 
-`0.1.0`. What works today, and what does not, is listed under
+`0.1.1`. What works today, and what does not, is listed under
 [What it does not do](#what-it-does-not-do). The short version: single-process,
 synchronous agents; faithful replay; loud divergence; replayable rollback. Not
 concurrency, not streaming, not multi-agent, not general-purpose undo.

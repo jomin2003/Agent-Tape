@@ -102,6 +102,11 @@ branch = true
 source = ["agenttape"]
 
 [tool.coverage.report]
+# A floor, not a target. It is here to catch a new module or a new branch
+# arriving with no tests at all, not to demand that every defensive guard be
+# exercised. The guards that genuinely cannot be reached are marked
+# `# pragma: no cover` with a comment saying why.
+fail_under = 95
 show_missing = true
 skip_covered = true
 exclude_lines = [

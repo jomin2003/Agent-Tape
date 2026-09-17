@@ -424,3 +424,88 @@ def test_repr_is_informative(tape_path):
     with at.record(tape_path) as session:
         assert "record" in repr(session)
         assert os.path.basename(tape_path) in repr(session)
+
+
+# --------------------------------------------------------------------------- #
+# Introspection
+# --------------------------------------------------------------------------- #
+
+
+def test_introspection_properties_during_recording(tape_path):
+    with at.record(tape_path, seed=7) as session:
+        assert session.mode == "record"
+        assert session.tape is session._tape
+        assert str(session.path) == tape_path
+        assert session.seed == 7
+        assert session.last_event is None
+
+        session.tool("t", [1], response="v")
+
+        assert session.last_event is not None
+        assert session.last_event.name == "t"
+        assert session.counts == {"tool": 1}
+        assert session.remaining == 0  # nothing is being replayed
+
+
+def test_introspection_properties_during_replay(recorded):
+    path, agent = recorded
+    with at.replay(path) as session:
+        assert session.mode == "replay"
+        # A replay session has nothing to record into, so counts is empty rather
+        # than raising: it is introspection, not an operation.
+        assert session.counts == {}
+        agent(session)
+        assert session.consumed > 0
+        assert session.last_event is not None
+
+
+def test_the_call_alias_behaves_like_exchange(tape_path):
+    with at.record(tape_path) as session:
+        assert session.call("custom", "thing", {"k": 1}, response="v") == "v"
+    with at.replay(tape_path) as session:
+        assert session.call("custom", "thing", {"k": 1}) == "v"
+
+
+def test_tape_and_replayer_expose_the_tape_they_work_on(recorded):
+    path, agent = recorded
+    session = at.replay(path)
+    agent(session)
+    assert session.tape is session._tape
+    assert session._replayer.tape is session._tape
+    summary = session._replayer.summary()
+    assert summary["consumed"] > 0
+    assert summary["remaining"] == 0
+    assert summary["strict"] is True
+    session.close()
+
+
+def test_summary_is_empty_before_close(tape_path):
+    session = at.record(tape_path)
+    assert session.summary == {}
+    assert session.closed is False
+    session.close()
+    assert session.summary["mode"] == "record"
+    assert session.closed is True
+
+
+def test_a_wrongly_typed_compensate_argument_is_rejected(tape_path):
+    with at.record(tape_path) as session:
+        for bad in (123, ["refund"], ("refund",), ("refund", {}, "extra")):
+            with pytest.raises(at.CompensationError):
+                session.effect("charge", response="ok", compensate=bad)
+
+
+def test_unset_is_falsy_and_renders_readably():
+    assert not at.UNSET
+    assert repr(at.UNSET) == "UNSET"
+    assert at.UNSET is at.UNSET, "UNSET is a singleton"
+    assert type(at.UNSET)() is at.UNSET, "constructing it again returns the same object"
+
+
+def test_the_channels_expose_the_tape_and_policy_they_use(tape_path):
+    with at.record(tape_path) as session:
+        assert session._recorder.tape is session.tape
+
+    with at.replay(tape_path, strict=False) as session:
+        assert session._replayer.tape is session.tape
+        assert session._replayer.strict is False
