@@ -10,7 +10,7 @@ Record AI agent runs to local files. Replay them offline, deterministically.
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-355-brightgreen.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-363-brightgreen.svg)](tests)
 
 Pure Python · zero runtime dependencies · library only
 
@@ -505,7 +505,7 @@ Full reference: [`docs/api.md`](docs/api.md).
 ## Testing
 
 ```bash
-pytest                       # 355 tests, a few seconds, no network
+pytest                       # 363 tests, a few seconds, no network
 pytest --cov=agenttape
 ```
 
